@@ -2,10 +2,12 @@
 #
 # Standalone-era deploy: the instance consumes the published engine
 # (@ucsb-ampl/zasqua) from the npm registry, so `npm ci` pulls the engine,
-# Hugo Extended, Pagefind, and Tailwind together. `zasqua build` then wraps
-# the whole pipeline (B2 download, precompute, derive-children, enrich, Hugo,
+# Hugo Extended, Pagefind, and Tailwind together. `zasqua fetch` then
+# downloads the B2 export (Stage 1), and `zasqua build` validates it and runs
+# the rest of the pipeline (precompute, derive-children, enrich, Hugo,
 # Pagefind) — there is no per-stage scripting here, unlike the pre-split
-# monorepo workflow this replaces.
+# monorepo workflow this replaces. Fetch is a separate step because the
+# build validates its inputs before downloading, so the data must exist first.
 #
 # target_bucket is the only staging/production switch: it defaults to
 # zasqua-staging (-> staging.zasqua.org) and accepts zasqua-site for a direct
@@ -30,7 +32,7 @@
 #                   full corpus. A capped build is NOT a valid production
 #                   artefact.
 #
-# Version: v1.0.0
+# Version: v1.1.0
 
 name: Build and deploy to R2
 
@@ -106,13 +108,23 @@ jobs:
         run: |
           echo "::warning::DEV_LIMIT=${{ inputs.dev_limit }} — building a subset; NOT a production build."
 
-      - name: Build site (zasqua build)
-        # `zasqua build` runs the full pipeline: B2 download (Stage 1, needs the
-        # B2 keys), precompute-links, derive-children, enrich, Hugo, Pagefind.
+      - name: Fetch data (zasqua fetch)
+        # `zasqua build` validates the data inputs BEFORE building, so the B2
+        # export must be on disk first. `zasqua fetch` runs Stage 1 (the B2
+        # download) only; the build step then validates and builds against
+        # these exports with SKIP_DOWNLOAD=1 so it does not download twice.
         env:
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+        run: npx zasqua fetch
+
+      - name: Build site (zasqua build)
+        # Validates the fetched inputs, then runs precompute-links,
+        # derive-children, enrich, Hugo, and Pagefind. SKIP_DOWNLOAD=1 reuses
+        # the exports fetched above rather than downloading them again.
+        env:
           DEV_LIMIT: ${{ inputs.dev_limit }}
+          SKIP_DOWNLOAD: "1"
         run: |
           npx zasqua build
           echo "Pages: $(find public -name 'index.html' | wc -l)"
@@ -210,4 +222,4 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-# Version: v1.1.0 (add confirm_deletes opt-in)
+# Version: v1.1.0 (separate zasqua fetch step before build; confirm_deletes opt-in)
