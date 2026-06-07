@@ -20,11 +20,11 @@ repository secrets:
   B2_APPLICATION_KEY_ID / B2_APPLICATION_KEY
       -> authorize against B2 (validates the key pair)
   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / CLOUDFLARE_ACCOUNT_ID
-      -> reach the zasqua-staging bucket over the R2 S3 endpoint
+      -> list, then write and delete a transient test key on zasqua-staging
   CF_API_TOKEN / CF_ZONE_ID
       -> verify the token is active and can read the zasqua.org zone
 
-Version: v1.0.0
+Version: v1.1.0
 """
 
 import os
@@ -71,8 +71,14 @@ def r2_check():
         aws_secret_access_key=sak,
         region_name="auto",
     )
-    r = s3.list_objects_v2(Bucket="zasqua-staging", MaxKeys=1)
-    return f"reached zasqua-staging (KeyCount={r.get('KeyCount', 0)})"
+    s3.list_objects_v2(Bucket="zasqua-staging", MaxKeys=1)
+    # Write-probe: confirm PUT + DELETE, not just read — a deploy writes.
+    # The test key is transient (deleted immediately) and sits under a
+    # __preflight__/ prefix the Worker never serves.
+    probe_key = "__preflight__/write-check.txt"
+    s3.put_object(Bucket="zasqua-staging", Key=probe_key, Body=b"zasqua secrets preflight")
+    s3.delete_object(Bucket="zasqua-staging", Key=probe_key)
+    return "list + write + delete OK on zasqua-staging"
 
 
 def _cf_get(path, token):
@@ -114,4 +120,4 @@ print()
 print("all checks passed" if ok_all else "one or more checks FAILED")
 sys.exit(0 if ok_all else 1)
 
-# Version: v1.0.0
+# Version: v1.1.0
