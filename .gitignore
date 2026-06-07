@@ -1,0 +1,67 @@
+# Zasqua Neogranadina instance — gitignore
+#
+# This file controls what the Neogranadina overlay instance commits to
+# version control. Several entries here are critical for correct
+# operation and public-repo hygiene:
+#
+#   themes/base/ — the CLI (`zasqua build` / `zasqua dev`) copies the
+#     engine's base theme into this directory at build time. The copy
+#     is a derived artefact of the engine npm package install; committing
+#     it would duplicate engine sources, create merge conflicts, and
+#     cause stale-theme issues when the engine version changes.
+#
+#   .dev.vars — Cloudflare Workers local secrets file (R2 keys, CF
+#     tokens). Never committed. Must be created locally from
+#     .dev.vars.example before running `wrangler dev`.
+#
+#   exports/ and static/data/ — B2 data downloads fetched at build
+#     time by `zasqua fetch`. These are large binary and JSON artefacts
+#     that are not part of the source tree.
+#
+#   *.tgz — npm pack tarballs created when testing a tarball install of
+#     the engine. Not source files.
+#
+# Version: v1.0.0
+
+# Build output
+public/
+resources/_gen/
+.hugo_build.lock
+
+# Dependencies
+node_modules/
+
+# Data exports pulled at build time
+exports/
+static/data/
+assets/hugo-data/*.json
+assets/hugo-data/descriptions/
+
+# Build tooling / artefacts
+hugo_stats.json
+tailwindcss
+tailwindcss-*
+
+# Base theme copy — derived artefact, NOT source.
+# The CLI copies engine/themes/base → instance/themes/base at build time.
+# Committing it would duplicate engine sources and cause stale-theme drift.
+themes/base/
+
+# Local secrets (Cloudflare Workers, R2, B2)
+.dev.vars
+
+# npm pack tarballs (parity-harness artefacts)
+*.tgz
+
+# Cloudflare local dev state
+.wrangler/
+
+# OS / editor noise
+.DS_Store
+*.log
+logs/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/

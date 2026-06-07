@@ -1,0 +1,119 @@
+# Zasqua Neogranadina instance — Hugo site configuration
+#
+# This file configures the Neogranadina overlay instance of the Zasqua
+# archive platform. It layers on top of the engine's neutral base theme
+# by selecting theme = ["neogranadina", "base"]: Hugo resolves templates,
+# assets, and content by working through that list left-to-right, so any
+# file present in the neogranadina theme takes precedence over the
+# corresponding file in the base theme.
+#
+# Two Tailwind landmines this config addresses explicitly:
+#
+#   1. `build.writeStats = true` tells Hugo to emit `hugo_stats.json`
+#      during every build. Tailwind v4's JIT engine reads that file to
+#      discover which CSS classes the rendered HTML actually uses, so
+#      the generated stylesheet includes only the classes in play. If
+#      this flag is missing, Tailwind ships a skeletal stylesheet and
+#      the site looks unstyled — with no error.
+#
+#   2. The `[module]` block below mounts `hugo_stats.json` into
+#      `assets/notwatching/hugo_stats.json`. Tailwind v4's `@source`
+#      directive respects `.gitignore`, and `hugo_stats.json` is
+#      exactly the kind of build artefact most projects reflexively
+#      gitignore — at which point Tailwind silently stops seeing it
+#      and ships an incomplete stylesheet. Mounting the file into
+#      `assets/` via Hugo modules makes it visible to the Hugo Pipes
+#      CSS pipeline regardless of what `.gitignore` says, closing
+#      the silent-failure window.
+#
+# Secrets and infra: R2/B2 credentials, CF account/zone tokens, and
+# Wrangler secrets live in env / GitHub Actions secrets / gitignored
+# .dev.vars — never in this file. The three params below
+# (maptiler_key, cf_analytics_token, beacon_url) are intentionally
+# public: maptiler_key is origin-restricted to *.zasqua.org and
+# localhost; cf_analytics_token is a public Cloudflare Web Analytics
+# beacon token; beacon_url is a public API endpoint. None are
+# credentials.
+#
+# Large archival JSON (descriptions, entities, places) is NOT loaded
+# from the `data/` directory. Large data is fetched lazily inside the
+# three content adapters at `content/{descripcion,entidad,lugar}/`
+# via `resources.Get` (single-file) or `resources.Match` (sharded).
+#
+# Version: v1.1.0
+
+baseURL = "https://zasqua.org/"
+languageCode = "es-CO"
+defaultContentLanguage = "es"
+title = "Zasqua"
+theme = ["neogranadina", "base"]
+
+# Emit a robots.txt rendered from `layouts/robots.txt`. Hugo's
+# default is false — leaving it off means Cloudflare's zone-level
+# Managed Robots.txt is the only source of truth for crawler rules,
+# and it never includes a `Sitemap:` directive. Turning this on lets
+# our template contribute the Sitemap pointer while Cloudflare's AI-
+# bot controls still merge ahead of it at the edge.
+enableRobotsTXT = true
+
+[params]
+  description = "Zasqua es la plataforma de consulta de materiales de archivo, libros, revistas e instrumentos de consulta digitalizados y sistematizados por Neogranadina y sus aliados."
+  version = "1.1.0"
+  # Deployer identity strings. The engine's base theme ships neutral
+  # defaults in data/ui.yaml (e.g. "Identificador", "© {year}"); each
+  # template reads `site.Params.X | default <base value>`, so these
+  # params customise individual strings WITHOUT the data-file override
+  # that Hugo's top-level-key merge would use to clobber sibling labels.
+  # The {year} token in footer_copyright is replaced at build time.
+  entity_code_label = "Identificador Neogranadina"
+  place_code_label = "Identificador Neogranadina"
+  footer_copyright = "© {year} Fundación Histórica Neogranadina"
+  # MapTiler custom Topo-style basemap for /lugar/ and /lugares/ maps.
+  # Key is origin-restricted to *.zasqua.org, zasqua.org, and localhost.
+  maptiler_key = "vBKZJsibMDOLDhSILppQ"
+  maptiler_style_id = "019da873-63fb-7cc9-8623-b0641f80a80a"
+  # Cloudflare Web Analytics beacon token (public — not a credential).
+  cf_analytics_token = "bd05fe4ac01547849248727c0598306e"
+  # Neogranadina search-analytics API endpoint (public URL — not a credential).
+  beacon_url = "https://neogranadina-dashboard.neogranadina.workers.dev/api/beacon/search"
+
+[build]
+  writeStats = true
+  [build.buildStats]
+    enable = true
+
+# Mount `hugo_stats.json` into the asset pipeline so Tailwind's
+# @source directive in assets/css/main.css can reach it regardless of
+# whether the file is gitignored. Without this mount, a gitignored
+# hugo_stats.json produces a silently incomplete stylesheet.
+#
+# Also mounts `zasqua.manifest.toml` as a Hugo data file so that all
+# templates can read module flags via hugo.Data.manifest.modules.*
+# without requiring a second copy of the file. The manifest key does
+# not collide with the base theme's ui.yaml (which occupies the "ui"
+# key), so the two data sources coexist without clobbering each other.
+[module]
+  [[module.mounts]]
+    source = "assets"
+    target = "assets"
+  [[module.mounts]]
+    source = "hugo_stats.json"
+    target = "assets/notwatching/hugo_stats.json"
+    disableWatch = true
+  [[module.mounts]]
+    source = "zasqua.manifest.toml"
+    target = "data/manifest.toml"
+
+[[build.cachebusters]]
+  source = 'assets/notwatching/hugo_stats\.json'
+  target = 'css'
+
+[[build.cachebusters]]
+  source = '(postcss|tailwind)\.config\.js'
+  target = 'css'
+
+[markup]
+  [markup.goldmark.renderer]
+    unsafe = true
+
+# Footer: Version: v1.1.0

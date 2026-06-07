@@ -1,0 +1,125 @@
+{{/*
+  Neogranadina home page — identity override
+
+  Overrides the engine base home page with the full Neogranadina
+  editorial layout: the burgundy logo hero, the intro paragraphs, and
+  per-repo card overrides that present each of the five partner
+  archives with their specific titles, subtitles, images, and
+  categories. The pe-bn card is deliberately presented as a themed
+  project card for "Narra la Independencia".
+
+  The intro blurb is no longer hardcoded here. It is authored as
+  deployer-editable content in content/_index.md (the `intro`
+  front-matter list) and rendered below via `range .Params.intro`,
+  each entry wrapped in <p class="section-intro font-display"> and
+  passed through safeHTML so inline <strong> emphasis is honoured.
+
+  Repository data is loaded from assets/hugo-data/repositories.json.
+  Number formatting: lang.FormatNumber 0 N uses the es-CO locale,
+  producing the Latin American dot thousands separator (e.g. 55.359).
+
+  Recovered from the flat layout at commit 451fa8c and split into this
+  theme overlay per the ENGINE-04 neutral-vs-identity split.
+
+  Version: v1.1.0
+*/}}
+{{ define "main" }}
+{{ $repos := slice }}
+{{ with resources.Get "hugo-data/repositories.json" }}
+  {{ $repos = . | transform.Unmarshal }}
+{{ end }}
+
+<section class="hero">
+  <div class="hero-content">
+    <img src="/img/zasqua-3-burgundy-sm.svg" alt="" class="hero-logo">
+    <h1>
+      <span class="site-name font-serif">{{ site.Title }}</span>
+    </h1>
+    <form class="search-form" action="/buscar/" method="get">
+      <input type="search" name="q" class="search-input" placeholder="{{ hugo.Data.ui.search.placeholder }}">
+      <button type="submit" class="search-button"><span class="material-symbols-outlined">search</span></button>
+    </form>
+  </div>
+</section>
+
+<section class="section intro-section">
+  <div class="container">
+    {{ range .Params.intro }}<p class="section-intro font-display">{{ . | safeHTML }}</p>
+    {{ end }}
+  </div>
+</section>
+
+<section class="section repo-section">
+  <h2 class="section-title font-display">Explora nuestras colecciones</h2>
+
+  <div class="repo-grid">
+    {{ $order := slice "pe-bn" "co-ahjci" "co-ahr" "co-ahrb" "co-cihjml" }}
+    {{ range $code := $order }}
+      {{ $matches := where $repos "code" $code }}
+      {{ if eq (len $matches) 0 }}{{ continue }}{{ end }}
+      {{ $repo := index $matches 0 }}
+
+      {{ $repoImage := "/img/neogranadina-placeholder.png" }}
+      {{ $repoTitle := $repo.name }}
+      {{ $repoSubtitle := "" }}
+      {{ $repoCategory := "" }}
+      {{ $repoLink := printf "/%s/" $repo.code }}
+
+      {{/* pe-bn is presented as a themed project card for Narra la
+           Independencia, not a generic repo card — title, image,
+           subtitle, and link all point at the /pe-bn-cdip/ root
+           collection rather than the /pe-bn/ repo landing. Deliberate
+           editorial override carried over from the Eleventy baseline. */}}
+      {{ if eq $repo.code "pe-bn" }}
+        {{ $repoImage = "/img/narra.jpg" }}
+        {{ $repoTitle = "Narra la Independencia" }}
+        {{ $repoSubtitle = "Edición digital de la Colección documental de la Independencia del Perú, creada para el proyecto de historia pública Narra la Independencia desde tu pueblo, tu distrito o tu ciudad." }}
+        {{ $repoCategory = "Fuentes sobre la independencia del Perú" }}
+        {{ $repoLink = "/pe-bn-cdip/" }}
+      {{ end }}
+      {{ if eq $repo.code "co-ahr" }}
+        {{ $repoImage = "/img/AHR_front.jpg" }}
+        {{ $repoTitle = "Archivo Histórico de Rionegro" }}
+        {{ $repoSubtitle = "Catálogos y materiales digitalizados por Neogranadina en el Archivo Histórico de Rionegro, Antioquia, Colombia." }}
+        {{ $repoCategory = "Rionegro, Antioquia" }}
+      {{ end }}
+      {{ if eq $repo.code "co-ahrb" }}
+        {{ $repoImage = "/img/AHRB_front.jpg" }}
+        {{ $repoTitle = "Archivo Histórico Regional de Boyacá" }}
+        {{ $repoSubtitle = "Materiales digitalizados por Neogranadina en el Archivo Histórico Regional de Boyacá, Tunja, Colombia." }}
+        {{ $repoCategory = "Tunja, Boyacá" }}
+      {{ end }}
+      {{ if eq $repo.code "co-cihjml" }}
+        {{ $repoImage = "/img/ACC_front.jpg" }}
+        {{ $repoTitle = "Antiguo Archivo Central del Cauca" }}
+        {{ $repoSubtitle = "Catálogos y materiales digitalizados por Neogranadina en el fondo Antiguo Archivo Central del Cauca, del Centro de Investigaciones Históricas José María Arboleda Llorente, Popayán, Colombia." }}
+        {{ $repoCategory = "Popayán, Cauca" }}
+      {{ end }}
+      {{ if eq $repo.code "co-ahjci" }}
+        {{ $repoImage = "/img/istmina.jpg" }}
+        {{ $repoTitle = "Archivo Histórico del Juzgado del Circuito de Istmina" }}
+        {{ $repoSubtitle = "Materiales digitalizados en el Archivo Histórico del Juzgado del Circuito de Istmina, Chocó, Colombia, en el proyecto EAP1477." }}
+        {{ $repoCategory = "Istmina, Chocó" }}
+      {{ end }}
+
+      <div class="repo-item">
+        <a href="{{ $repoLink }}" class="repo-link">
+          <img src="{{ $repoImage }}" alt="{{ $repoTitle }}" class="repo-image">
+          <div class="repo-caption">
+            <h3 class="repo-caption-title">{{ $repoTitle }}</h3>
+            {{ with $repoCategory }}<p class="repo-caption-category">{{ . }}</p>{{ end }}
+          </div>
+          <div class="repo-overlay">
+            <div class="repo-info">
+              <h3 class="repo-title">{{ $repoTitle }}</h3>
+              {{ with $repoSubtitle }}<p class="repo-subtitle">{{ . }}</p>{{ end }}
+              <p class="repo-subtitle">{{ lang.FormatNumber 0 (default 0 $repo.description_count) }} {{ hugo.Data.ui.repository.itemsCount }}</p>
+            </div>
+          </div>
+        </a>
+      </div>
+    {{ end }}
+  </div>
+</section>
+{{ end }}
+{{/* Version: v1.1.0 */}}

@@ -1,0 +1,62 @@
+# Zasqua Neogranadina instance — capability manifest
+#
+# This file declares which Zasqua modules are active for this instance.
+# It is the single source of truth for both the Node build pipeline
+# (which reads it via engine/lib/manifest.js to decide which data files
+# to process) and Hugo templates (which read it as hugo.Data.manifest
+# to decide which pages, nav links, and search indices to build).
+#
+# `zasqua init` generates a first draft of this file by scanning the
+# exports/ data directory and detecting which fields are populated.
+# Edit the flags below to match what your data actually contains.
+#
+# After editing, run `zasqua validate` to confirm your data files
+# match the modules you have declared. A mismatch (e.g. entities = true
+# but entities.json is absent) will fail the build with a clear message.
+#
+# Version: v0.3.0
+
+[ui]
+
+# UI language — BCP-47 locale tag for the site's interface language.
+# Chrome strings (navigation, buttons, error messages) render in this language.
+# Supported: "en-US" (English), "es-CO" (Colombian Spanish).
+language = "es-CO"
+
+[modules]
+
+# Core (descriptions + repositories) is always required — no flag here.
+
+# Hierarchy: derive a browsable Miller-column tree from the
+# parent_reference_code field in descriptions.json. Requires that
+# descriptions carry parent_reference_code values.
+hierarchy = true
+
+# Entities: ISAAR(CPF) authority records (persons, corporate bodies,
+# families) with co-occurrence linking and an entity explorer.
+# Requires: entities.json, entity_links.json.
+entities = true
+
+# Entity co-occurrence graph visualization on entity detail pages.
+# Requires: entities = true, entities.json, and entity_links.json.
+entities_graph = true
+
+# Places: geographic authority records with coordinate data, a
+# clustered marker map, and a place explorer.
+# Requires: places.json, place_links.json.
+places = true
+
+# Interactive map of places (client-side MapLibre clustering from place-index.json).
+# Requires: places = true.
+places_map = true
+
+# IIIF deep-zoom viewer — "auto" enables the TIFY viewer per record
+# wherever iiif_manifest_url is set in the description data. Set to
+# false to suppress the viewer entirely across all records.
+iiif = "auto"
+
+# OCR full-text search — "auto" indexes ocr_text per record wherever
+# that field is populated. Set to false to suppress OCR indexing.
+ocr = "auto"
+
+# Version: v0.3.0

@@ -1,0 +1,46 @@
+{{/*
+  Neogranadina site footer — identity override
+
+  Overrides the engine base footer partial with the Neogranadina
+  identity chrome: the copyright + colophon line, the engine framework
+  credit, and the logo_grande.svg / ampl-cropped-1.png seal images.
+
+  The footer carries no "Zasqua es una plataforma…" prose paragraph: it
+  duplicated the colophon's opening sentence and overlapped the framework
+  credit (both name Zasqua and AMPL), so it was removed.
+
+  Because this override replaces the base footer wholesale, it includes
+  the engine's hardcoded framework-credit.html partial explicitly — the
+  one line the engine requires every deployer to carry. The AGPL-3.0 mark
+  and the "Código fuente" source link both live on that engine line now
+  (the engine owns the source link, since AGPL §13 obliges every
+  deployment to offer it); the overlay no longer adds its own link. The
+  partial's <p class="footer-framework"> is styled inline via the
+  .footer-fineprint wrapper; see the overlay main.css.
+
+  The copyright holder comes from site.Params.footer_copyright (set in
+  the instance hugo.toml), falling back to the engine's neutral
+  "© {year}" default. The {year} token is replaced at build time with
+  the current year — stable for ~12 months, so it does not churn
+  per-page ETags materially. Identity travels through params rather than
+  a data override because Hugo replaces whole top-level data maps across
+  the theme chain (it would otherwise drop base footer keys).
+
+  Recovered from the flat layout at commit 451fa8c and split into this
+  theme overlay per the ENGINE-04 neutral-vs-identity split.
+
+  Version: v1.1.0
+*/}}
+<footer class="site-footer bg-burgundy-dark text-white">
+  <div class="container">
+    <div class="footer-left text-sm">
+      <p class="footer-copyright">{{ replace (site.Params.footer_copyright | default hugo.Data.ui.footer.copyright) "{year}" (now.Format "2006") }}. <a href="/colofon/" class="text-white hover:text-periwinkle">{{ hugo.Data.ui.footer.colofon_link_text }}</a>.</p>
+      <div class="footer-fineprint">{{ partial "framework-credit.html" . }}</div>
+    </div>
+    <div class="footer-right">
+      <img src="/img/logo_grande.svg" alt="Neogranadina" class="footer-seal">
+      <img src="/img/ampl-cropped-1.png" alt="AMP Lab, UC Santa Barbara" class="footer-seal">
+    </div>
+  </div>
+</footer>
+{{/* Version: v1.1.0 */}}

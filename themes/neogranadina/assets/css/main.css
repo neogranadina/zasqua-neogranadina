@@ -1,0 +1,88 @@
+/*
+ * Neogranadina instance — CSS entry point
+ *
+ * This file is the CSS entry point for the Neogranadina overlay instance.
+ * Hugo theme composition (theme = ["neogranadina", "base"]) resolves
+ * assets/css/main.css by checking the neogranadina theme first; this file
+ * wins over the engine base main.css because it appears in the higher-
+ * priority theme.
+ *
+ * Because this overlay entry shadows the base theme's own main.css in
+ * Hugo's unioned asset filesystem, it cannot import the base layer by the
+ * main.css path (that resolves back to this file). The engine base theme
+ * therefore keeps its Tailwind layer in a distinct base.css, which both
+ * the base theme's thin main.css and this overlay import as "base.css".
+ *
+ * Import order is load-bearing for Tailwind v4 @theme override:
+ *
+ *   1. The base engine stylesheet (base.css from the engine base theme)
+ *      is imported first, bringing in Tailwind preflight, the @source directive
+ *      pointed at hugo_stats.json, the placeholder @theme token names, all layout
+ *      constants, base resets, component classes, and utility overrides.
+ *
+ *   2. tokens.css is imported second, redefining the @theme token names with
+ *      Neogranadina brand values (burgundy/ochre palette, DM Sans/Crimson Text/
+ *      Cormorant Garamond font stacks). Tailwind v4 processes @theme blocks in
+ *      source order; later declarations override earlier ones, so the Neogranadina
+ *      palette wins the merge.
+ *
+ * Changing the import order here would silently revert to the placeholder tokens.
+ *
+ * @version v1.1.0
+ */
+
+@import "base.css";
+@import "./tokens.css";
+
+/* base.css sets `@import "tailwindcss" source(none)`, so automatic file
+   scanning is off and this overlay must declare its own class sources.
+   The neogranadina theme supplies override templates (header, footer,
+   home, repository chrome) whose utility classes must be detected.
+   Project-root-relative path (Tailwind resolves @source from the build
+   working directory under Hugo's stdin-fed css.TailwindCSS pipeline). */
+@source "themes/neogranadina";
+
+/* ====================
+   Hero background — instance-specific.
+
+   The engine base theme styles .hero's layout (flex centering, min-height,
+   burgundy fallback colour) but ships no hero image by design. Neogranadina
+   supplies the photographic backdrop here; the asset lives at
+   static/img/hero.jpg in this overlay. background-attachment: fixed gives the
+   parallax effect on desktop; it falls back to scroll at narrow widths where
+   fixed backgrounds are janky / unsupported on mobile.
+   ==================== */
+.hero {
+  background-image: url('/img/hero.jpg');
+  background-attachment: fixed;
+  background-position: center center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+@media (max-width: 1024px) {
+  .hero {
+    background-attachment: scroll;
+  }
+}
+
+/* ====================
+   Footer fine print — keep the deployer "Código fuente" link on the engine
+   attribution line. framework-credit.html (the engine partial) renders its
+   own <p class="footer-framework">; inlining it inside this wrapper lets the
+   source link flow on the same line, with the top spacing carried by the
+   wrapper. Scoped to the overlay so the base footer is unaffected.
+   ==================== */
+.footer-fineprint {
+  margin-top: 0.75rem;
+}
+
+.footer-fineprint .footer-framework {
+  display: inline;
+  margin: 0;
+}
+
+.footer-source {
+  font-size: 12px;
+  opacity: 0.55;
+}

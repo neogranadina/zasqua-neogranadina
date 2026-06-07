@@ -1,0 +1,47 @@
+/*
+ * Neogranadina identity tokens — Tailwind v4 @theme override
+ *
+ * Redefines the placeholder design tokens from the engine base stylesheet
+ * (engine/themes/base/assets/css/main.css) with the Neogranadina brand
+ * palette and font stacks. Tailwind v4 merges multiple @theme blocks; the
+ * last-declared values win. Hugo theme composition (theme = ["neogranadina",
+ * "base"]) processes the neogranadina theme's assets before the base theme's
+ * assets, so this file's tokens take precedence in the compiled CSS output.
+ *
+ * Mechanism for Tailwind v4 @theme multi-file override: Hugo's
+ * css.TailwindCSS pipe processes all CSS files from the active theme
+ * stack. The instance entry CSS imports both main.css and this
+ * tokens.css; since Tailwind v4 processes @theme blocks in source order and
+ * later declarations override earlier ones, placing this @import after the
+ * base main.css import ensures these tokens win. The @theme override is a
+ * Tailwind v4.x feature confirmed working in the spike (2026-05-29).
+ *
+ * Palette matches zasqua-catalogacion (Fisqua) so both surfaces read as a
+ * single platform family. Named colours are in burgundy/ochre/sage/periwinkle
+ * family; --color-bg is the warm off-white used site-wide.
+ *
+ * @version v1.0.0
+ */
+
+@theme {
+  /* Neogranadina brand palette */
+  --color-burgundy: #8B2942;
+  --color-burgundy-deep: #6B1F33;
+  --color-burgundy-light: #B14D66;
+  --color-burgundy-dark: #4A1522;
+  --color-pale-rose: #F5E6EA;
+  --color-ochre: #C5965F;
+  --color-sage: #8A9B8E;
+  --color-periwinkle: #C9D5FF;
+  --color-bg: #FAFAF9;
+
+  /* Neogranadina font stacks */
+  --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-serif: "Crimson Text", ui-serif, Georgia, Cambria, "Times New Roman",
+    Times, serif;
+  --font-display: "Cormorant Garamond", ui-serif, Georgia, Cambria,
+    "Times New Roman", Times, serif;
+}
+
+/* Version: v1.0.0 */

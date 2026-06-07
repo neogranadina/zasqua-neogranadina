@@ -1,0 +1,49 @@
+{{/*
+  Neogranadina site header — identity override
+
+  Overrides the engine base header partial with Neogranadina-specific
+  chrome: the "Neogranadina:" logo-text prefix, the burgundy SVG logo
+  at /img/zasqua-3-burgundy-sm.svg, and the external nav links pointing
+  to neogranadina.org/proyectos/zasqua (Acerca) and
+  neogranadina.fisqua.org (Catalogación). These are the identity items
+  that distinguish Neogranadina's deployment from a generic instance.
+
+  Recovered from the flat layout at commit 451fa8c and split into this
+  theme overlay per the ENGINE-04 neutral-vs-identity split.
+
+  When composed via theme = ["neogranadina", "base"], Hugo picks this
+  partial over the engine base version.
+
+  Version: v1.0.0
+*/}}
+<header class="site-header">
+  <div class="container">
+    <a href="/" class="site-logo">
+      <img src="/img/zasqua-3-burgundy-sm.svg" alt="{{ site.Title }}">
+      <span class="site-logo-text font-serif">Neogranadina: <strong>{{ site.Title }}</strong></span>
+    </a>
+    <button class="hamburger-toggle" type="button" aria-label="Menu" aria-expanded="false">
+      <span class="material-symbols-outlined">menu</span>
+    </button>
+    <nav class="site-nav font-sans">
+      <a href="/" class="text-sm uppercase tracking-wide">{{ hugo.Data.ui.nav.home }}</a>
+      <div class="nav-dropdown">
+        <button type="button" class="nav-dropdown-trigger text-sm uppercase tracking-wide">
+          {{ hugo.Data.ui.nav.browse }} <span class="material-symbols-outlined nav-dropdown-arrow">expand_more</span>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a href="/buscar/">Documentos</a>
+          <a href="/entidades/">Entidades</a>
+          <a href="/lugares/">Lugares</a>
+        </div>
+      </div>
+      <a href="https://neogranadina.org/proyectos/zasqua" class="text-sm uppercase tracking-wide">{{ hugo.Data.ui.nav.about }}</a>
+      <a href="https://neogranadina.fisqua.org" class="text-sm uppercase tracking-wide">{{ hugo.Data.ui.nav.catalogacion }}</a>
+      <form class="header-search" action="/buscar/" method="get">
+        <input type="search" name="q" placeholder="{{ hugo.Data.ui.search.placeholder }}">
+        <button type="submit"><span class="material-symbols-outlined">search</span></button>
+      </form>
+    </nav>
+  </div>
+</header>
+{{/* Version: v1.0.0 */}}
