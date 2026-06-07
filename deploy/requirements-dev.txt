@@ -1,0 +1,19 @@
+# Test-only dependencies for instance/deploy/upload-to-r2.py.
+#
+# These are NOT installed in production CI; they are consumed only
+# by the pytest job that runs `pytest instance/deploy/tests/`. The
+# runtime deps (b2[full], boto3) live in requirements.txt and are
+# installed by the main CI deploy step.
+#
+# moto[s3] replays the S3 API in process via mock_aws so the test
+# suite never touches real R2 credentials or the network. Pin exact
+# versions for reproducibility; keep in sync with the test job step
+# in .github/workflows/deploy-staging.yml.
+#
+# Python 3.14 compatibility: pytest 9.0.3 and moto 5.1.22 (with its
+# boto3 transitive dep) run cleanly on Python 3.14.4 — no pins needed.
+#
+# Version: v1.0.0
+
+pytest==9.0.3
+moto[s3]==5.1.22

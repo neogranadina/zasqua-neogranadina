@@ -1,0 +1,20 @@
+# Python dependency pins for Zasqua Neogranadina instance deploy pipeline.
+#
+# Relocated from scripts/requirements.txt (history preserved via git mv).
+#
+# Installed in CI by `.github/workflows/deploy-staging.yml` before stage 1
+# (B2 download) and consumed by `instance/deploy/upload-to-r2.py` (boto3)
+# and the B2 download step (b2 CLI). Pin exact versions so a CI run is
+# reproducible. Test-only pins (pytest, moto[s3]) live in requirements-dev.txt
+# and are installed only by the pytest CI job step.
+#
+# Note: `b2[full]` is an engine-fetch-time dep (used by zasqua fetch / Stage
+# 1 of build.sh to download exports from Backblaze B2). It lives here because
+# both it and the R2-upload boto3 dep are installed in the same CI step, but
+# architecturally it belongs to the engine pipeline, not the instance deploy.
+#
+# Version: v1.0.2
+
+# Runtime deps (consumed by CI deploy workflow)
+b2[full]==4.6.0
+boto3==1.42.91

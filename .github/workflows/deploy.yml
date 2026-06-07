@@ -1,0 +1,213 @@
+# Build and deploy the Neogranadina instance to R2
+#
+# Standalone-era deploy: the instance consumes the published engine
+# (@ucsb-ampl/zasqua) from the npm registry, so `npm ci` pulls the engine,
+# Hugo Extended, Pagefind, and Tailwind together. `zasqua build` then wraps
+# the whole pipeline (B2 download, precompute, derive-children, enrich, Hugo,
+# Pagefind) — there is no per-stage scripting here, unlike the pre-split
+# monorepo workflow this replaces.
+#
+# target_bucket is the only staging/production switch: it defaults to
+# zasqua-staging (-> staging.zasqua.org) and accepts zasqua-site for a direct
+# production deploy. There is no separate promote workflow; a staging ->
+# production promote is a bucket-to-bucket copy run with upload-to-r2.py
+# (--copy-from zasqua-staging zasqua-site).
+#
+# Manual trigger only (workflow_dispatch). Runs on ubicloud-standard-8: Hugo's
+# working set at ~191K pagesources peaks near 9.4 GB, which OOMs GitHub's free
+# 7 GB runner; the 8-core / 32 GB tier gives headroom and parallelism.
+#
+# Required repository secrets:
+#   B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY   (read b2://zasqua-export)
+#   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, CLOUDFLARE_ACCOUNT_ID
+#   CF_API_TOKEN, CF_ZONE_ID                    (cache purge)
+#
+# Inputs:
+#   target_bucket — R2 bucket to deploy to. Default zasqua-staging.
+#   dry_run       — run build + diff pass, print would-upload / would-delete,
+#                   skip PUT / DELETE / purge.
+#   dev_limit     — optional integer cap on records (fast iteration). Unset =
+#                   full corpus. A capped build is NOT a valid production
+#                   artefact.
+#
+# Version: v1.0.0
+
+name: Build and deploy to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_bucket:
+        description: "R2 bucket to deploy to. Leave as default for staging."
+        required: true
+        type: string
+        default: zasqua-staging
+      dry_run:
+        description: "Build + diff pass, print would-upload / would-delete, skip PUT / DELETE / purge."
+        required: false
+        type: boolean
+        default: false
+      dev_limit:
+        description: "Optional DEV_LIMIT (integer) — cap records for fast iteration. Blank = full corpus."
+        required: false
+        type: string
+      confirm_deletes:
+        description: "Override the 5% delete safety cap. Needed for the first cutover deploy over a bucket still holding the old pipeline's output; leave off for routine deploys."
+        required: false
+        type: boolean
+        default: false
+
+# Serialise deploys per bucket so concurrent dispatches do not race on the
+# R2 LIST / PUT / DELETE pool.
+concurrency:
+  group: deploy-${{ inputs.target_bucket }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubicloud-standard-8
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Python deploy dependencies
+        # deploy/requirements.txt pins b2[full] (engine fetch) + boto3 (R2
+        # upload). Lockfile-only: do not inline-install here.
+        run: pip install -r deploy/requirements.txt --quiet
+
+      - name: Install npm dependencies
+        # Pulls @ucsb-ampl/zasqua from the registry plus Hugo Extended,
+        # Pagefind, and Tailwind (all instance deps). The engine's zasqua CLI
+        # lands in node_modules/.bin.
+        run: npm ci
+
+      - name: Deploy script unit tests (upload-to-r2 pytest suite)
+        # moto[s3] mocks the S3 API in process — no real R2 credentials or
+        # network. Cheap fail-fast guard before the expensive build.
+        run: |
+          pip install -q -r deploy/requirements-dev.txt
+          python -m pytest deploy/tests/ -q
+
+      - name: DEV_LIMIT banner
+        if: inputs.dev_limit != ''
+        run: |
+          echo "::warning::DEV_LIMIT=${{ inputs.dev_limit }} — building a subset; NOT a production build."
+
+      - name: Build site (zasqua build)
+        # `zasqua build` runs the full pipeline: B2 download (Stage 1, needs the
+        # B2 keys), precompute-links, derive-children, enrich, Hugo, Pagefind.
+        env:
+          B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          DEV_LIMIT: ${{ inputs.dev_limit }}
+        run: |
+          npx zasqua build
+          echo "Pages: $(find public -name 'index.html' | wc -l)"
+          echo "Site size: $(du -sh public | cut -f1)"
+
+      - name: Shard sitemap.xml (keep shards under 50K URLs)
+        # Hugo emits a single ~191K-URL sitemap.xml; Google caps a sitemap at
+        # 50K URLs. shard-sitemap.py splits it into 45K-URL shards and rewrites
+        # sitemap.xml as a sitemap index. Idempotent; skips when under 45K.
+        run: python3 deploy/shard-sitemap.py
+
+      - name: Deploy to R2 (${{ inputs.target_bucket }})
+        id: upload
+        env:
+          PYTHONUNBUFFERED: "1"
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          set -o pipefail
+          DRY_RUN_FLAG=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            DRY_RUN_FLAG="--dry-run"
+            echo "::notice::dry_run=true — diff pass runs but no PUT / DELETE will be issued."
+          fi
+          CONFIRM_FLAG=""
+          [ "${{ inputs.confirm_deletes }}" = "true" ] && CONFIRM_FLAG="--confirm-deletes"
+          python3 deploy/upload-to-r2.py public "${{ inputs.target_bucket }}" \
+            --concurrency 100 \
+            --diff \
+            $CONFIRM_FLAG \
+            $DRY_RUN_FLAG | tee upload.log
+
+          # Parse the summary line for the skip-purge guard. Shape:
+          #   r2-upload uploaded=<N> skipped=<N> deleted=<N> failed=<N> ...
+          # Dry-run emits `r2-upload mode=dry-run would_upload=<N> ...`.
+          SUMMARY=$(grep '^r2-upload ' upload.log | tail -1 || true)
+          if echo "$SUMMARY" | grep -q 'mode=dry-run'; then
+            UPLOADED=0; DELETED=0
+          else
+            UPLOADED=$(echo "$SUMMARY" | grep -oE 'uploaded=[0-9]+' | head -1 | cut -d= -f2)
+            DELETED=$(echo "$SUMMARY" | grep -oE 'deleted=[0-9]+' | head -1 | cut -d= -f2)
+          fi
+          if [ "${UPLOADED:-0}" -gt 0 ] || [ "${DELETED:-0}" -gt 0 ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "summary_line=$SUMMARY" >> "$GITHUB_OUTPUT"
+
+      - name: Purge Cloudflare cache
+        # Skip when nothing changed or on dry runs.
+        if: steps.upload.outputs.changed == 'true' && inputs.dry_run != true
+        env:
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_ZONE_ID: ${{ secrets.CF_ZONE_ID }}
+        run: |
+          response=$(curl -s -w "\n__HTTP_STATUS__%{http_code}" -X POST \
+            "https://api.cloudflare.com/client/v4/zones/${CF_ZONE_ID}/purge_cache" \
+            -H "Authorization: Bearer ${CF_API_TOKEN}" \
+            -H "Content-Type: application/json" \
+            --data '{"purge_everything": true}')
+          http_code="${response##*__HTTP_STATUS__}"
+          body="${response%__HTTP_STATUS__*}"
+          echo "Cloudflare purge HTTP ${http_code}"
+          echo "${body}"
+          if [ "${http_code}" -ne 200 ]; then
+            echo "::error::Cloudflare cache purge returned HTTP ${http_code}"
+            exit 1
+          fi
+          echo "Cache purged"
+
+      - name: Write GHA summary
+        if: always()
+        run: |
+          {
+            echo "## Deploy — summary"
+            echo ""
+            echo "**Target bucket:** \`${{ inputs.target_bucket }}\`"
+            echo "**Dry run:** \`${{ inputs.dry_run }}\`"
+            echo "**DEV_LIMIT:** \`${{ inputs.dev_limit || 'unset' }}\`"
+            echo ""
+            echo "### r2-upload summary"
+            echo '```'
+            grep '^r2-upload ' upload.log 2>/dev/null | tail -1 || echo "(no r2-upload summary line — upload did not run or failed before emission)"
+            echo '```'
+            echo ""
+            echo "### Cache purge"
+            if [ "${{ steps.upload.outputs.changed }}" = "true" ] && [ "${{ inputs.dry_run }}" != "true" ]; then
+              echo "Purged (uploaded or deleted > 0)."
+            elif [ "${{ inputs.dry_run }}" = "true" ]; then
+              echo "Skipped (dry_run=true)."
+            else
+              echo "Skipped (no changes detected)."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+# Version: v1.1.0 (add confirm_deletes opt-in)
