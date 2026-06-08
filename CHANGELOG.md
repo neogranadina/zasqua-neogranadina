@@ -2,15 +2,15 @@
 
 All notable changes to Zasqua — the Neogranadina archive at [zasqua.org](https://zasqua.org) — are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This is the **instance** changelog (the deployed site); the publishing engine has its own changelog at [`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua).
 
-## [1.1.0] — Unreleased
+## [1.1.0] — 2026-06-08
 
-Standalone-engine migration. Zasqua's publishing software was extracted into a reusable, separately versioned engine ([`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua)); this repository is now a thin instance overlay that consumes it. The site output is unchanged — the migration is architectural — but the software that builds it is no longer bundled here. (The pre-migration self-contained code is archived at [`neogranadina/zasqua`](https://github.com/neogranadina/zasqua).)
+Standalone-engine migration. Zasqua's publishing software was extracted into a reusable, separately versioned engine ([`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua)); this repository is now a thin instance overlay that consumes it. The site output is unchanged — the migration is architectural — but the software that builds it is no longer bundled here. (The pre-migration self-contained code is preserved at [`neogranadina/zasqua`](https://github.com/neogranadina/zasqua).)
 
 ### Changed
 
 - **Built on the standalone Zasqua engine.** The self-contained build (Hugo invocations, enrichment scripts, base layouts) is gone; the site is now produced by `zasqua build` from the published engine, pinned in `package.json`. This repository carries only the Neogranadina overlay — identity theme, content, configuration, and deploy machinery.
 - **Colophon rewritten** to distinguish the archive from the engine: it now shows the instance version and the engine version separately, links each to its own repository, and credits [Fisqua](https://github.com/UCSB-AMPLab/fisqua) as the cataloguing source, replacing the reference to the retired Django backend.
-- **Footer simplified.** The duplicated institutional paragraph was removed, and the "Código fuente" source-code link is now carried by the engine's attribution line — pointing at the engine repository — rather than hardcoded in the instance.
+- **Footer reworked.** The duplicated institutional paragraph was collapsed into a single identity line — naming Neogranadina (linked to neogranadina.org) and the AMPL — above the copyright. The "Código fuente" source-code link is now carried by the engine's attribution line, pointing at the engine repository, rather than hardcoded in the instance.
 
 ### Removed
 
