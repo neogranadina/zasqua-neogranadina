@@ -5,9 +5,12 @@
   identity chrome: the copyright + colophon line, the engine framework
   credit, and the logo_grande.svg / ampl-cropped-1.png seal images.
 
-  The footer carries no "Zasqua es una plataforma…" prose paragraph: it
-  duplicated the colophon's opening sentence and overlapped the framework
-  credit (both name Zasqua and AMPL), so it was removed.
+  The footer opens with a short identity blurb (footer-tagline) naming the
+  archive and its AMPL collaboration. It is deliberately about the archive,
+  not the software: the framework-credit line below names the engine, so the
+  two do not overlap. Earlier in v1.1.0 this paragraph was dropped as a
+  perceived duplicate of the colophon; it was restored as instance identity
+  chrome that the colophon (a separate page) does not provide in the footer.
 
   Because this override replaces the base footer wholesale, it includes
   the engine's hardcoded framework-credit.html partial explicitly — the
@@ -34,6 +37,7 @@
 <footer class="site-footer bg-burgundy-dark text-white">
   <div class="container">
     <div class="footer-left text-sm">
+      <p class="footer-tagline">Zasqua es el archivo digital de la Fundación Histórica Neogranadina y sus instituciones aliadas, desarrollado en colaboración con el <a href="https://ampl.clair.ucsb.edu" target="_blank" rel="noopener" class="text-white hover:text-periwinkle">Laboratorio de Archivos, Memoria y Preservación (AMPL)</a> de la Universidad de California, Santa Bárbara.</p>
       <p class="footer-copyright">{{ replace (site.Params.footer_copyright | default hugo.Data.ui.footer.copyright) "{year}" (now.Format "2006") }}. <a href="/colofon/" class="text-white hover:text-periwinkle">{{ hugo.Data.ui.footer.colofon_link_text }}</a>.</p>
       <div class="footer-fineprint">{{ partial "framework-credit.html" . }}</div>
     </div>

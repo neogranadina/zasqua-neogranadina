@@ -67,6 +67,17 @@
 }
 
 /* ====================
+   Footer identity blurb — the opening line naming the archive and the AMPL
+   collaboration. Renders at the .footer-left base size (14px), one step
+   larger than the copyright and framework lines below, so it reads as the
+   footer's lead statement. Margins are zeroed because the gap to the
+   copyright line is supplied by .footer-copyright's own margin-top.
+   ==================== */
+.footer-tagline {
+  margin: 0;
+}
+
+/* ====================
    Footer fine print — keep the deployer "Código fuente" link on the engine
    attribution line. framework-credit.html (the engine partial) renders its
    own <p class="footer-framework">; inlining it inside this wrapper lets the
@@ -86,3 +97,5 @@
   font-size: 12px;
   opacity: 0.55;
 }
+
+/* Version: v1.1.0 */
