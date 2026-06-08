@@ -2,12 +2,12 @@
 #
 # Standalone-era deploy: the instance consumes the published engine
 # (@ucsb-ampl/zasqua) from the npm registry, so `npm ci` pulls the engine,
-# Hugo Extended, Pagefind, and Tailwind together. `zasqua fetch` then
-# downloads the B2 export (Stage 1), and `zasqua build` validates it and runs
-# the rest of the pipeline (precompute, derive-children, enrich, Hugo,
-# Pagefind) — there is no per-stage scripting here, unlike the pre-split
-# monorepo workflow this replaces. Fetch is a separate step because the
-# build validates its inputs before downloading, so the data must exist first.
+# Hugo Extended, Pagefind, and Tailwind together. The engine is
+# storage-agnostic — it builds from the local exports/ directory and fetches
+# nothing — so this workflow owns the data fetch: it downloads the six
+# contract files from Backblaze B2 (the bucket this instance stores its
+# exports in) into exports/, then `zasqua build` validates them and runs the
+# pipeline (precompute, derive-children, enrich, Hugo, Pagefind).
 #
 # target_bucket is the only staging/production switch: it defaults to
 # zasqua-staging (-> staging.zasqua.org) and accepts zasqua-site for a direct
@@ -108,23 +108,30 @@ jobs:
         run: |
           echo "::warning::DEV_LIMIT=${{ inputs.dev_limit }} — building a subset; NOT a production build."
 
-      - name: Fetch data (zasqua fetch)
-        # `zasqua build` validates the data inputs BEFORE building, so the B2
-        # export must be on disk first. `zasqua fetch` runs Stage 1 (the B2
-        # download) only; the build step then validates and builds against
-        # these exports with SKIP_DOWNLOAD=1 so it does not download twice.
+      - name: Fetch data from B2
+        # The engine is storage-agnostic: `zasqua build` reads the six contract
+        # files from exports/ and never fetches data itself. This instance
+        # stores its exports in Backblaze B2, so it downloads them here, into
+        # exports/, before the build. The b2 CLI is installed via
+        # deploy/requirements.txt above; the bucket name lives here, in the
+        # instance, not in the engine.
         env:
           B2_APPLICATION_KEY_ID: ${{ secrets.B2_APPLICATION_KEY_ID }}
           B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
-        run: npx zasqua fetch
+        run: |
+          b2 account authorize "$B2_APPLICATION_KEY_ID" "$B2_APPLICATION_KEY"
+          mkdir -p exports
+          for f in descriptions repositories entities places entity_links place_links; do
+            b2 file download "b2://zasqua-export/$f.json" "exports/$f.json"
+          done
+          ls -lh exports/descriptions.json exports/repositories.json
 
       - name: Build site (zasqua build)
         # Validates the fetched inputs, then runs precompute-links,
-        # derive-children, enrich, Hugo, and Pagefind. SKIP_DOWNLOAD=1 reuses
-        # the exports fetched above rather than downloading them again.
+        # derive-children, enrich, Hugo, and Pagefind against the exports/
+        # downloaded above.
         env:
           DEV_LIMIT: ${{ inputs.dev_limit }}
-          SKIP_DOWNLOAD: "1"
         run: |
           npx zasqua build
           echo "Pages: $(find public -name 'index.html' | wc -l)"
@@ -222,4 +229,4 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-# Version: v1.1.0 (separate zasqua fetch step before build; confirm_deletes opt-in)
+# Version: v1.1.0 (instance owns the B2 fetch; engine is storage-agnostic)

@@ -58,9 +58,11 @@ npm run dev     # zasqua dev — vista previa local en 127.0.0.1:1313
 npm run build   # zasqua build — construcción estática completa en public/
 ```
 
-`zasqua fetch` descarga solo la exportación de datos; `zasqua build` ejecuta todo
-el proceso. Defina `DEV_LIMIT=<n>` para construir un subconjunto en iteraciones
-rápidas (una construcción limitada no es un artefacto de producción válido).
+`zasqua build` ejecuta todo el proceso con los archivos del contrato que estén
+en `exports/`; antes de construir en local, descárguelos de Backblaze B2 o use
+su propia copia. Defina `DEV_LIMIT=<n>` para construir un subconjunto en
+iteraciones rápidas (una construcción limitada no es un artefacto de producción
+válido).
 
 ## Despliegue
 
@@ -166,9 +168,10 @@ npm run dev     # zasqua dev — local preview at 127.0.0.1:1313
 npm run build   # zasqua build — full static build into public/
 ```
 
-`zasqua fetch` downloads the data export only; `zasqua build` runs the whole
-pipeline. Set `DEV_LIMIT=<n>` to build a subset for fast iteration (a capped
-build is not a valid production artifact).
+`zasqua build` runs the whole pipeline against the contract files in `exports/`;
+populate them from Backblaze B2 (or your own copy) before building locally. Set
+`DEV_LIMIT=<n>` to build a subset for fast iteration (a capped build is not a
+valid production artifact).
 
 ## Deployment
 
