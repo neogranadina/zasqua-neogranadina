@@ -29,7 +29,7 @@ repository secrets:
          goal, so we avoid the user-scoped /user/tokens/verify endpoint,
          which 401s for exactly that kind of token.
 
-Version: v1.1.2
+Version: v1.1.0
 """
 
 import os
@@ -164,4 +164,4 @@ print()
 print("all checks passed" if ok_all else "one or more checks FAILED")
 sys.exit(0 if ok_all else 1)
 
-# Version: v1.1.2 (drop /user/tokens/verify — hostile to least-privilege tokens)
+# Version: v1.1.0
