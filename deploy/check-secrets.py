@@ -4,11 +4,11 @@ Secrets preflight — verify the deploy credentials without a build or deploy.
 
 The deploy workflow (deploy.yml) needs seven repository secrets: two for
 Backblaze B2 (the data fetch), three for Cloudflare R2 (the upload), and
-two for Cloudflare (the cache purge). A wrong or missing value only
-surfaces partway through a ~30-minute full build, so this script probes
-each credential set with a cheap, read-only call and reports PASS/FAIL
-per check up front. It is meant to be run by check-secrets.yml on demand,
-as a gate before a real deploy.
+two for Cloudflare (the cache purge). A wrong, missing, or under-scoped
+value only surfaces partway through a ~30-minute full build, so this script
+probes each credential set with a cheap call and reports PASS/FAIL per check
+up front. It is meant to be run by check-secrets.yml on demand, as a gate
+before a real deploy.
 
 It never prints a secret value — only whether each credential works and a
 short, non-sensitive detail (a bucket reached, a zone name). It exits
@@ -22,11 +22,14 @@ repository secrets:
   R2_ACCESS_KEY_ID / R2_SECRET_ACCESS_KEY / CLOUDFLARE_ACCOUNT_ID
       -> list, then write and delete a transient test key on zasqua-staging
   CF_API_TOKEN / CF_ZONE_ID
-      -> verify the token is active, can read the zasqua.org zone, and
-         holds the Cache Purge permission (a single-URL purge of a path
-         the site never serves — exercises the permission, no-ops the cache)
+      -> read the zasqua.org zone (also proves the token is live), then
+         confirm the Cache Purge permission with a single-URL purge of a
+         path the site never serves (exercises the permission, no-ops the
+         cache). A least-privilege token scoped to only this zone is the
+         goal, so we avoid the user-scoped /user/tokens/verify endpoint,
+         which 401s for exactly that kind of token.
 
-Version: v1.1.1
+Version: v1.1.2
 """
 
 import os
@@ -120,24 +123,23 @@ def _cf_post(path, token, payload):
     return data["result"]
 
 
-def cf_token_check():
-    (token,) = need("CF_API_TOKEN")
-    result = _cf_get("/user/tokens/verify", token)
-    return f"token {result.get('status', '?')}"
-
-
 def cf_zone_check():
+    # Doubles as the token-liveness check: a missing, expired, or revoked
+    # token 401s here, so a successful zone read proves the token is valid
+    # AND can see zasqua.org. (We deliberately do not call /user/tokens/verify
+    # — that user-scoped endpoint 401s for a correctly least-privilege token
+    # scoped to only this zone, which is exactly the token we want.)
     token, zone = need("CF_API_TOKEN", "CF_ZONE_ID")
     result = _cf_get(f"/zones/{zone}", token)
     return f"zone {result.get('name', '?')}"
 
 
 def cf_purge_check():
-    # Token verify + zone read pass with only Zone.Read, but the deploy's
-    # cache purge needs the separate Cache Purge permission. Probe it with a
-    # single-URL purge of a path the Worker never serves: it returns success
-    # only if the permission is present, and purging a non-existent URL is a
-    # no-op on the live cache.
+    # The zone read passes with only Zone.Read, but the deploy's cache purge
+    # needs the separate Cache Purge permission. Probe it with a single-URL
+    # purge of a path the Worker never serves: it returns success only if the
+    # permission is present, and purging a non-existent URL is a no-op on the
+    # live cache.
     token, zone = need("CF_API_TOKEN", "CF_ZONE_ID")
     _cf_post(
         f"/zones/{zone}/purge_cache",
@@ -149,7 +151,6 @@ def cf_purge_check():
 
 check("B2 (fetch)", b2_check)
 check("R2 (upload)", r2_check)
-check("Cloudflare token", cf_token_check)
 check("Cloudflare zone", cf_zone_check)
 check("Cloudflare purge", cf_purge_check)
 
@@ -163,4 +164,4 @@ print()
 print("all checks passed" if ok_all else "one or more checks FAILED")
 sys.exit(0 if ok_all else 1)
 
-# Version: v1.1.1 (added Cloudflare purge-permission probe)
+# Version: v1.1.2 (drop /user/tokens/verify — hostile to least-privilege tokens)
