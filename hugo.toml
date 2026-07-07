@@ -40,7 +40,7 @@
 # three content adapters at `content/{descripcion,entidad,lugar}/`
 # via `resources.Get` (single-file) or `resources.Match` (sharded).
 #
-# Version: v1.1.0
+# Version: v1.2.0
 
 baseURL = "https://zasqua.org/"
 languageCode = "es-CO"
@@ -58,7 +58,7 @@ enableRobotsTXT = true
 
 [params]
   description = "Zasqua es la plataforma de consulta de materiales de archivo, libros, revistas e instrumentos de consulta digitalizados y sistematizados por Neogranadina y sus aliados."
-  version = "1.1.0"
+  version = "1.2.0"
   # Deployer identity strings. The engine's base theme ships neutral
   # defaults in data/ui.yaml (e.g. "Identificador", "© {year}"); each
   # template reads `site.Params.X | default <base value>`, so these
@@ -116,4 +116,4 @@ enableRobotsTXT = true
   [markup.goldmark.renderer]
     unsafe = true
 
-# Footer: Version: v1.1.0
+# Footer: Version: v1.2.0
