@@ -2,15 +2,30 @@
 
 All notable changes to Zasqua — the Neogranadina archive at [zasqua.org](https://zasqua.org) — are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This is the **instance** changelog (the deployed site); the publishing engine has its own changelog at [`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua).
 
+## [1.2.0] — 2026-07-06
+
+Engine uptake. The site moves from Zasqua engine 1.2.0 to 1.4.0. The Neogranadina overlay itself is unchanged — only the pinned engine version — so the changes below are the engine's, surfaced on this site. See the [engine changelog](https://github.com/UCSB-AMPLab/zasqua/blob/main/CHANGELOG.md) for the full engine history.
+
+### Changed
+
+- **Updated to the Zasqua engine 1.4.0** (from 1.2.0), pinned in `package.json`; the colophon now reports the engine as 1.4.0.
+- **Date facet counts follow the archival century convention.** Century and decade tallies in the search and entity date filters now match the index: a boundary year such as 1700 falls under siglo XVII (not XVIII), and each century's total equals the sum of the decades and years beneath it — replacing the previous colloquial grouping.
+- **IIIF viewer controls hardened.** The TIFY deep-zoom viewer's page controls and the "Miniaturas" thumbnail toggle are driven through the viewer's public interface, making them resilient to viewer load timing.
+- **Network graph reads entity metadata from the authority index** rather than from rendered page markup, so an expanded entity's name, type, and document count render reliably.
+
+### Fixed
+
+- **Apostrophes in place names no longer break the place timeline.** A single quote in a place name is now escaped when the timeline markup is built.
+
 ## [1.1.0] — 2026-06-08
 
-Standalone-engine migration. Zasqua's publishing software was extracted into a reusable, separately versioned engine ([`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua)); this repository is now a thin instance overlay that consumes it. The site output is unchanged — the migration is architectural — but the software that builds it is no longer bundled here. (The pre-migration self-contained code is preserved at [`neogranadina/zasqua`](https://github.com/neogranadina/zasqua).)
+Standalone-engine migration. Zasqua's publishing software was extracted into a reusable, separately versioned engine ([`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua)); this repository is now a thin instance overlay that consumes it. The site output is unchanged — the migration is architectural — but the software that builds it is no longer bundled here. (The pre-migration self-contained code is archived at [`neogranadina/zasqua`](https://github.com/neogranadina/zasqua).)
 
 ### Changed
 
 - **Built on the standalone Zasqua engine.** The self-contained build (Hugo invocations, enrichment scripts, base layouts) is gone; the site is now produced by `zasqua build` from the published engine, pinned in `package.json`. This repository carries only the Neogranadina overlay — identity theme, content, configuration, and deploy machinery.
 - **Colophon rewritten** to distinguish the archive from the engine: it now shows the instance version and the engine version separately, links each to its own repository, and credits [Fisqua](https://github.com/UCSB-AMPLab/fisqua) as the cataloguing source, replacing the reference to the retired Django backend.
-- **Footer reworked.** The duplicated institutional paragraph was collapsed into a single identity line — naming Neogranadina (linked to neogranadina.org) and the AMPL — above the copyright. The "Código fuente" source-code link is now carried by the engine's attribution line, pointing at the engine repository, rather than hardcoded in the instance.
+- **Footer simplified.** The duplicated institutional paragraph was removed, and the "Código fuente" source-code link is now carried by the engine's attribution line — pointing at the engine repository — rather than hardcoded in the instance.
 
 ### Removed
 
