@@ -1,25 +1,43 @@
 /**
  * @file worker/worker.js
  * @description Cloudflare Worker serving zasqua.org (prod) and
- *   staging.zasqua.org (staging) from R2. Handles pretty-URL resolution,
- *   edge caching, PMTiles range requests on /tiles/*, and — on the
- *   staging deployment only (STAGING=true in wrangler.toml
- *   [env.staging].vars) — two crawler-deterrent mitigations:
+ *   staging.zasqua.org (staging). Handles pretty-URL resolution, edge
+ *   caching, and — on the staging deployment only (STAGING=true in
+ *   wrangler.toml [env.staging].vars) — two crawler-deterrent mitigations:
  *     1. /robots.txt returns a blanket Disallow: / .
  *     2. Every response carries X-Robots-Tag: noindex, nofollow.
  *
- *   Mitigation 2 was added in v0.3.0 after the first staging deploy
- *   showed that Cloudflare's zone-level Managed Robots.txt feature
- *   prepends its own content-signal block (including User-agent: *
- *   Allow: /) before the Worker's Disallow. First-match REP parsers
- *   (Googlebot, per RFC 9309) would see the Allow and ignore the
- *   later Disallow. X-Robots-Tag on every response is the reliable
- *   belt-and-braces signal.
+ *   Storage origin — the R2 -> B2 transition (2026-07): this Worker can
+ *   read the SITE from either of two origins, chosen per deployment by an
+ *   environment variable, with no build step and no code fork:
+ *     * R2 binding (default) — when SITE_ORIGIN is unset, the site is read
+ *       from the bound R2 bucket (env.SITE). This is the production path today.
+ *     * B2 HTTP origin — when SITE_ORIGIN is set to a public Backblaze B2
+ *       download base URL, the Worker fetches site objects over HTTP from B2
+ *       instead. This is how staging proves the B2 serving path before
+ *       production cuts over.
+ *   Because the mode is a variable, rollback from B2 to R2 is a config-only
+ *   change: drop SITE_ORIGIN and redeploy — the R2 binding the environment
+ *   still carries takes over again. The transition covers the site only.
  *
- *   Prod and staging share this one source file; behaviour diverges
- *   only on env.STAGING. No build step.
+ *   The one subtlety the B2 path must respect is key encoding. R2 bindings
+ *   look objects up by their raw, decoded UTF-8 key; a B2 HTTP origin needs
+ *   that key percent-encoded back into a URL path (the exact inverse of the
+ *   decodeURIComponent applied to url.pathname up front), encoding each
+ *   path segment while preserving the slashes — otherwise every non-ASCII
+ *   slug (e.g. `…eclesiástico…`) would 404 at the origin. See encodeKey().
  *
- * @version v1.0.1
+ *   Mitigation 2 (X-Robots-Tag) was added in v0.3.0 after the first staging
+ *   deploy showed that Cloudflare's zone-level Managed Robots.txt feature
+ *   prepends its own content-signal block (including User-agent: * Allow: /)
+ *   before the Worker's Disallow. First-match REP parsers (Googlebot, per
+ *   RFC 9309) would see the Allow and ignore the later Disallow. X-Robots-Tag
+ *   on every response is the reliable belt-and-braces signal.
+ *
+ *   Prod and staging share this one source file; behaviour diverges only on
+ *   env.STAGING and the SITE_ORIGIN variable. No build step.
+ *
+ * @version v1.2.0
  */
 
 export default {
@@ -33,11 +51,11 @@ export default {
     // R2 stores keys as raw UTF-8 bytes (e.g. `co-cihjml-acc-09474-
     // eclesiástico-i-cap/index.html`). Cloudflare Workers expose
     // `url.pathname` in its percent-encoded form
-    // (`…eclesi%C3%A1stico…`), so a literal R2 lookup against
+    // (`…eclesi%C3%A1stico…`), so a literal key lookup against
     // pathname would miss for every non-ASCII slug. Decode once up
     // front so subsequent logic runs against the true key. A
     // malformed %-escape (rare, usually a misbehaving client) falls
-    // back to the raw pathname — the R2 lookup then misses and the
+    // back to the raw pathname — the lookup then misses and the
     // normal 404 path handles it, rather than the Worker throwing.
     let decodedPathname;
     try {
@@ -49,7 +67,7 @@ export default {
     // On the staging deployment (STAGING=true in wrangler.toml
     // [env.staging].vars), intercept /robots.txt and serve a blanket
     // Disallow so crawlers don't index staging.zasqua.org. Prod Worker
-    // passes /robots.txt through to R2 (STAGING is undefined there).
+    // passes /robots.txt through to the origin (STAGING is undefined there).
     // Paired with the X-Robots-Tag injection (see stagingHeaders) for
     // resilience against Cloudflare's Managed Robots.txt prepending an
     // Allow: / block ahead of our Disallow (v0.3.0).
@@ -62,11 +80,6 @@ export default {
       }), env);
     }
 
-    // Serve PMTiles from /tiles/ path — same-origin, no CORS needed
-    if (decodedPathname.startsWith('/tiles/')) {
-      return stagingHeaders(await handleTiles(request, env, url), env);
-    }
-
     let path = decodedPathname;
 
     // Resolve directory paths to index.html
@@ -77,7 +90,7 @@ export default {
       path += '/index.html';
     }
 
-    // Strip leading slash for R2 key
+    // Strip leading slash for the object key
     const key = path.slice(1);
 
     // Check edge cache first
@@ -86,35 +99,90 @@ export default {
     let response = await cache.match(cacheKey);
     if (response) return stagingHeaders(response, env);
 
-    // Fetch from R2
-    const object = await env.SITE.get(key);
-
-    if (!object) {
-      // Try 404 page
-      const notFound = await env.SITE.get('404.html');
-      if (notFound) {
-        response = new Response(notFound.body, {
-          status: 404,
-          headers: { 'content-type': 'text/html; charset=utf-8' },
-        });
-        return stagingHeaders(response, env);
-      }
-      return stagingHeaders(new Response('Not Found', { status: 404 }), env);
+    // Fetch the object from whichever origin this deployment is wired to:
+    // a public B2 HTTP origin when SITE_ORIGIN is set, otherwise the bound
+    // R2 bucket. Both paths return a Worker-authoritative response (our own
+    // content-type and cache-control, so serving behaviour is identical
+    // regardless of which store holds the bytes).
+    if (env.SITE_ORIGIN) {
+      response = await serveFromOrigin(env.SITE_ORIGIN, key);
+    } else {
+      response = await serveFromBinding(env.SITE, key);
     }
 
-    const headers = new Headers();
-    headers.set('content-type', contentType(key));
-    headers.set('cache-control', cacheControl(key));
-    headers.set('etag', object.httpEtag);
-
-    response = new Response(object.body, { headers });
-
-    // Store in edge cache (non-blocking)
-    request.method === 'GET' && cache.put(cacheKey, response.clone());
+    // Store successful hits in the edge cache (non-blocking). 404s are not
+    // cached, matching the pre-transition behaviour.
+    if (request.method === 'GET' && response.status === 200) {
+      cache.put(cacheKey, response.clone());
+    }
 
     return stagingHeaders(response, env);
   },
 };
+
+// Re-encode a decoded object key for use in an origin URL path. Encodes
+// each path segment (so `eclesiástico` -> `eclesi%C3%A1stico`) while
+// preserving the slashes that separate them. This is the exact inverse of
+// the decodeURIComponent(url.pathname) applied at the top of fetch(), and
+// it is the single most likely place for a B2-origin bug to hide — a naive
+// encodeURIComponent(key) would also escape the slashes and break every
+// nested key.
+function encodeKey(key) {
+  return key.split('/').map(encodeURIComponent).join('/');
+}
+
+// Join a public origin base URL (e.g. a B2 download URL like
+// `https://f004.backblazeb2.com/file/zasqua-staging`, no trailing slash
+// required) to an encoded object key.
+function originUrl(origin, key) {
+  return origin.replace(/\/$/, '') + '/' + encodeKey(key);
+}
+
+// Serve a site object from the bound R2 bucket (the production path).
+async function serveFromBinding(bucket, key) {
+  const object = await bucket.get(key);
+  if (!object) {
+    const notFound = await bucket.get('404.html');
+    if (notFound) {
+      return new Response(notFound.body, {
+        status: 404,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+    return new Response('Not Found', { status: 404 });
+  }
+
+  const headers = new Headers();
+  headers.set('content-type', contentType(key));
+  headers.set('cache-control', cacheControl(key));
+  headers.set('etag', object.httpEtag);
+  return new Response(object.body, { headers });
+}
+
+// Serve a site object from a public B2 HTTP origin (the staging path during
+// the transition). Mirrors serveFromBinding's contract exactly — same
+// Worker-authoritative headers, same 404.html fallback — so the only thing
+// that changes between R2 and B2 is where the bytes come from.
+async function serveFromOrigin(origin, key) {
+  const originResp = await fetch(originUrl(origin, key));
+  if (!originResp.ok) {
+    const nf = await fetch(originUrl(origin, '404.html'));
+    if (nf.ok) {
+      return new Response(nf.body, {
+        status: 404,
+        headers: { 'content-type': 'text/html; charset=utf-8' },
+      });
+    }
+    return new Response('Not Found', { status: 404 });
+  }
+
+  const headers = new Headers();
+  headers.set('content-type', contentType(key));
+  headers.set('cache-control', cacheControl(key));
+  const etag = originResp.headers.get('etag');
+  if (etag) headers.set('etag', etag);
+  return new Response(originResp.body, { headers });
+}
 
 // Inject X-Robots-Tag: noindex, nofollow on every staging response so
 // crawlers that ignore or misparse robots.txt (or land before our
@@ -154,53 +222,21 @@ function contentType(key) {
 function cacheControl(key) {
   const ext = key.split('.').pop().toLowerCase();
   if (['html', 'xml'].includes(ext)) return 'public, max-age=3600';
-  if (['css', 'js'].includes(ext)) return 'public, max-age=604800';
+  // `pagefind` (the WASM runtime, e.g. `wasm.es.pagefind`) ships under a
+  // fixed filename tied to the Pagefind package version, not a content
+  // hash, so it shares the 7-day tier with its sibling .js/.css runtime
+  // files rather than the immutable tier below.
+  if (['css', 'js', 'pagefind'].includes(ext)) return 'public, max-age=604800';
   if (['json'].includes(ext)) return 'public, max-age=86400';
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'ico', 'svg', 'woff', 'woff2', 'ttf'].includes(ext)) {
+    return 'public, max-age=31536000, immutable';
+  }
+  // Pagefind index/fragment/filter/meta chunks — content-hashed
+  // filenames (e.g. `es_283012b.pf_filter`), safe to cache for a year.
+  if (['pf_index', 'pf_fragment', 'pf_filter', 'pf_meta'].includes(ext)) {
     return 'public, max-age=31536000, immutable';
   }
   return 'public, max-age=3600';
 }
 
-async function handleTiles(request, env, url) {
-  const name = url.pathname.slice('/tiles/'.length);
-  if (!name) return new Response('Not Found', { status: 404 });
-
-  // PMTiles library requests /tiles/zasqua-places — append .pmtiles extension
-  const key = name.endsWith('.pmtiles') ? name : name + '.pmtiles';
-
-  const rangeHeader = request.headers.get('Range');
-  const opts = {};
-
-  if (rangeHeader) {
-    const match = rangeHeader.match(/bytes=(\d+)-(\d*)/);
-    if (match) {
-      const offset = parseInt(match[1]);
-      const end = match[2] ? parseInt(match[2]) : undefined;
-      opts.range = end !== undefined
-        ? { offset, length: end - offset + 1 }
-        : { offset };
-    }
-  }
-
-  const object = await env.TILES.get(key, opts);
-  if (!object) return new Response('Not Found', { status: 404 });
-
-  const headers = new Headers();
-  headers.set('content-type', 'application/octet-stream');
-  headers.set('cache-control', 'public, max-age=86400');
-  headers.set('accept-ranges', 'bytes');
-  headers.set('etag', object.httpEtag);
-
-  if (rangeHeader && object.range) {
-    const { offset, length } = object.range;
-    headers.set('content-range', `bytes ${offset}-${offset + length - 1}/${object.size}`);
-    headers.set('content-length', length);
-    return new Response(object.body, { status: 206, headers });
-  }
-
-  headers.set('content-length', object.size);
-  return new Response(object.body, { status: 200, headers });
-}
-
-// Version: v1.0.1
+// Version: v1.2.0
