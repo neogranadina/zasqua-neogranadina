@@ -1,4 +1,4 @@
-# Test-only dependencies for instance/deploy/upload-to-r2.py.
+# Test-only dependencies for deploy/upload-to-r2.py.
 #
 # These are NOT installed in production CI; they are consumed only
 # by the pytest job that runs `pytest instance/deploy/tests/`. The

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unit Tests for upload-to-r2.py Diff Helpers
+Unit Tests for upload-to-b2.py Diff Helpers
 
 These tests exercise the LIST + ETag diff pass and the multipart-ETag
 guard added in the v1.0.0 cycle. They cover every branch of
@@ -22,12 +22,12 @@ Version: v1.0.0
 """
 
 
-def test_diff_skips_matching_md5(upload_to_r2):
+def test_diff_skips_matching_md5(upload_to_b2):
     local_files = [
         ("/tmp/a.html", "index.html", "a" * 32),
     ]
     remote_etags = {"index.html": "a" * 32}
-    to_upload, to_skip, to_delete = upload_to_r2.diff_files(
+    to_upload, to_skip, to_delete = upload_to_b2.diff_files(
         local_files, remote_etags
     )
     assert to_upload == []
@@ -36,12 +36,12 @@ def test_diff_skips_matching_md5(upload_to_r2):
     assert to_delete == []
 
 
-def test_diff_uploads_mismatched_md5(upload_to_r2):
+def test_diff_uploads_mismatched_md5(upload_to_b2):
     local_files = [
         ("/tmp/a.html", "index.html", "a" * 32),
     ]
     remote_etags = {"index.html": "b" * 32}
-    to_upload, to_skip, to_delete = upload_to_r2.diff_files(
+    to_upload, to_skip, to_delete = upload_to_b2.diff_files(
         local_files, remote_etags
     )
     assert len(to_upload) == 1
@@ -50,13 +50,13 @@ def test_diff_uploads_mismatched_md5(upload_to_r2):
     assert to_delete == []
 
 
-def test_diff_uploads_missing_remote(upload_to_r2):
+def test_diff_uploads_missing_remote(upload_to_b2):
     local_files = [
         ("/tmp/a.html", "index.html", "a" * 32),
         ("/tmp/b.html", "about.html", "b" * 32),
     ]
     remote_etags = {}  # empty bucket
-    to_upload, to_skip, to_delete = upload_to_r2.diff_files(
+    to_upload, to_skip, to_delete = upload_to_b2.diff_files(
         local_files, remote_etags
     )
     assert len(to_upload) == 2
@@ -66,7 +66,7 @@ def test_diff_uploads_missing_remote(upload_to_r2):
     assert to_delete == []
 
 
-def test_diff_flags_multipart_etag_as_changed(upload_to_r2):
+def test_diff_flags_multipart_etag_as_changed(upload_to_b2):
     """multipart composite ETag (contains '-') must force a
     re-upload even when the local MD5 happens to match the hex prefix."""
     local_files = [
@@ -75,7 +75,7 @@ def test_diff_flags_multipart_etag_as_changed(upload_to_r2):
     # Multipart ETag: 32-hex-prefix + '-' + part count. Even if the hex
     # prefix byte-matches the local MD5, the regex fails → force re-upload.
     remote_etags = {"big.json": "a" * 32 + "-4"}
-    to_upload, to_skip, to_delete = upload_to_r2.diff_files(
+    to_upload, to_skip, to_delete = upload_to_b2.diff_files(
         local_files, remote_etags
     )
     assert len(to_upload) == 1
@@ -83,7 +83,7 @@ def test_diff_flags_multipart_etag_as_changed(upload_to_r2):
     assert to_skip == []
 
 
-def test_diff_detects_deletes(upload_to_r2):
+def test_diff_detects_deletes(upload_to_b2):
     local_files = [
         ("/tmp/a.html", "index.html", "a" * 32),
     ]
@@ -92,7 +92,7 @@ def test_diff_detects_deletes(upload_to_r2):
         "stale-page.html": "b" * 32,
         "old/asset.png": "c" * 32,
     }
-    to_upload, to_skip, to_delete = upload_to_r2.diff_files(
+    to_upload, to_skip, to_delete = upload_to_b2.diff_files(
         local_files, remote_etags
     )
     assert to_upload == []
@@ -100,7 +100,7 @@ def test_diff_detects_deletes(upload_to_r2):
     assert sorted(to_delete) == ["old/asset.png", "stale-page.html"]
 
 
-def test_list_remote_etags_paginates(upload_to_r2, s3_client, src_bucket):
+def test_list_remote_etags_paginates(upload_to_b2, s3_client, src_bucket):
     """moto paginates list_objects_v2 at 1000 keys by default — seed the
     bucket with 1500 keys and confirm every one comes back."""
     for i in range(1500):
@@ -109,7 +109,7 @@ def test_list_remote_etags_paginates(upload_to_r2, s3_client, src_bucket):
             Key=f"page-{i:05d}.html",
             Body=b"<html></html>",
         )
-    result = upload_to_r2.list_remote_etags(s3_client, src_bucket)
+    result = upload_to_b2.list_remote_etags(s3_client, src_bucket)
     assert len(result) == 1500
     assert "page-00000.html" in result
     assert "page-01499.html" in result
@@ -119,6 +119,6 @@ def test_list_remote_etags_paginates(upload_to_r2, s3_client, src_bucket):
         assert all(c in "0123456789abcdef" for c in etag)
 
 
-def test_list_remote_etags_empty_bucket(upload_to_r2, s3_client, src_bucket):
-    result = upload_to_r2.list_remote_etags(s3_client, src_bucket)
+def test_list_remote_etags_empty_bucket(upload_to_b2, s3_client, src_bucket):
+    result = upload_to_b2.list_remote_etags(s3_client, src_bucket)
     assert result == {}

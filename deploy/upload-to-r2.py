@@ -9,8 +9,22 @@ headers are assigned per file extension so the bucket mirrors what the
 serving Worker (`worker/worker.js`) expects — fonts immutable, images
 immutable, HTML short, JSON medium, CSS and JavaScript long.
 
-The script supports three modes layered on top of the original
+A mode-aware bucket allowlist guards every run: the delete-sync modes may
+target only the site buckets (`zasqua-site`/`zasqua-staging`), and the
+additive mode may target only `zasqua-manifests`. Because the default mode
+LISTs the whole bucket and deletes orphans, this prevents a mistyped
+`target_bucket` from ever pruning the shared manifests bucket.
+
+The script supports four modes layered on top of the original
 full-upload path:
+
+  0. Additive prefix upload (`--prefix mets/ --no-delete`). Scopes the
+     remote LIST to one key prefix, prepends that prefix to every local
+     key, and NEVER deletes — orphans (renamed/deleted records) are
+     reported, not removed. This is how METS land in `zasqua-manifests/
+     mets/` without the diff ever seeing, or deleting, the sibling
+     `iiif/` corpus. Required (with the allowlist) to write that bucket.
+
 
   1. Diff upload (default on). Before uploading, the script lists every
      key in the target bucket via `list_objects_v2`, compares each local
@@ -78,7 +92,7 @@ Examples:
     python3 scripts/upload-to-r2.py --copy-from zasqua-staging zasqua-site
     python3 scripts/upload-to-r2.py _site zasqua-tests --dry-run
 
-Version: v1.0.0
+Version: v1.1.0
 """
 
 import argparse
@@ -129,10 +143,17 @@ CACHE_CONTROL = {
 
 SHORT_EXTS = {".html", ".xml"}
 MEDIUM_EXTS = {".json"}
-LONG_EXTS = {".css", ".js"}
+# `.pagefind` (the WASM runtime, e.g. `wasm.es.pagefind`) ships under a
+# fixed filename tied to the Pagefind package version, not a content
+# hash, so it gets the same 7-day tier as its sibling .js/.css runtime
+# files rather than IMMUTABLE_EXTS below.
+LONG_EXTS = {".css", ".js", ".pagefind"}
 IMMUTABLE_EXTS = {
     ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico",
     ".svg", ".woff", ".woff2", ".ttf",
+    # Pagefind index/fragment/filter/meta chunks — content-hashed
+    # filenames (e.g. `es_283012b.pf_filter`), safe to cache for a year.
+    ".pf_index", ".pf_fragment", ".pf_filter", ".pf_meta",
 }
 
 # ETag guard. Single-part MD5 ETags returned by R2 are exactly 32
@@ -147,6 +168,28 @@ _MD5_HEX_RE = re.compile(r"^[0-9a-f]{32}$")
 # remote bucket would be deleted in a single run. Operator overrides with
 # `--confirm-deletes` when the large delete is genuinely intentional.
 _DELETE_SAFETY_CAP = 0.05
+
+# Mode-aware bucket allowlists. The default delete-sync mode LISTs the WHOLE
+# bucket and deletes any remote key absent locally — catastrophic if aimed at a
+# shared bucket. So each mode may target only its own buckets:
+#   - delete-sync (default): the site buckets only. A hand-typed
+#     `target_bucket=zasqua-manifests` with --confirm-deletes can NEVER wipe the
+#     IIIF corpus, because this guard refuses the bucket outright.
+#   - additive (--no-delete): the manifests bucket only. Cannot delete anything.
+# The `target_bucket` deploy input is a free-form string, which is what makes
+# this guard load-bearing rather than advisory.
+_DELETE_MODE_ALLOWLIST = frozenset({"zasqua-site", "zasqua-staging"})
+_ADDITIVE_MODE_ALLOWLIST = frozenset({"zasqua-manifests"})
+
+
+def bucket_allowed(bucket, no_delete):
+    """Return True if `bucket` may be targeted in this mode, else False.
+
+    Pure predicate — main() turns a False into a non-zero exit. Kept separate so
+    it is unit-testable without spawning the CLI.
+    """
+    allow = _ADDITIVE_MODE_ALLOWLIST if no_delete else _DELETE_MODE_ALLOWLIST
+    return bucket in allow
 
 
 def content_type(path):
@@ -171,13 +214,18 @@ def cache_control(path):
 # File collection and hashing
 # ---------------------------------------------------------------------------
 
-def collect_files(source_dir):
-    """Walk source_dir and return list of (local_path, r2_key) tuples."""
+def collect_files(source_dir, key_prefix=""):
+    """Walk source_dir and return list of (local_path, r2_key) tuples.
+
+    key_prefix is prepended to every key (e.g. "mets/") so a source tree of
+    bare {slug}.xml files lands under a bucket prefix. Empty by default — the
+    site upload writes keys at the bucket root.
+    """
     source = Path(source_dir)
     files = []
     for path in source.rglob("*"):
         if path.is_file():
-            key = str(path.relative_to(source))
+            key = key_prefix + str(path.relative_to(source))
             files.append((str(path), key))
     return files
 
@@ -196,15 +244,21 @@ def md5_hex(path, chunk_size=1024 * 1024):
 # Diff helpers (LIST + ETag compare)
 # ---------------------------------------------------------------------------
 
-def list_remote_etags(s3, bucket):
+def list_remote_etags(s3, bucket, prefix=None):
     """Paginate list_objects_v2 for bucket and return {key: etag}.
 
-    ETags are returned with surrounding double-quotes stripped. Empty buckets
-    (NoSuchBucket-adjacent) simply yield {}.
+    When `prefix` is given, only keys under that prefix are listed — so an
+    additive upload into one prefix of a shared bucket (e.g. mets/ in a bucket
+    that also holds iiif/) never even sees, let alone diffs against, sibling
+    prefixes. ETags are returned with surrounding double-quotes stripped. Empty
+    buckets (NoSuchBucket-adjacent) simply yield {}.
     """
     result = {}
     paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket):
+    kwargs = {"Bucket": bucket}
+    if prefix:
+        kwargs["Prefix"] = prefix
+    for page in paginator.paginate(**kwargs):
         contents = page.get("Contents") or []
         for obj in contents:
             key = obj["Key"]
@@ -516,7 +570,35 @@ def main():
                              "to the destination bucket, skipping keys "
                              "whose source and destination ETags match. "
                              "source_dir is not used in this mode.")
+    parser.add_argument("--prefix", dest="prefix", default="",
+                        help="Key prefix (e.g. mets/) — prepended to every "
+                             "uploaded key AND used to scope the remote LIST, "
+                             "so the diff only ever sees keys under this "
+                             "prefix. Required for additive uploads into one "
+                             "prefix of a shared bucket.")
+    parser.add_argument("--no-delete", dest="no_delete", action="store_true",
+                        default=False,
+                        help="Additive mode: never delete remote keys. Orphans "
+                             "(remote keys absent locally) are reported but not "
+                             "removed. Required to target the manifests bucket.")
     args = parser.parse_args()
+
+    # Normalize the prefix to a trailing slash so keys join cleanly.
+    if args.prefix and not args.prefix.endswith("/"):
+        args.prefix += "/"
+
+    # Bucket guard (skipped for copy mode, which validates src/dst separately).
+    if args.copy_from is None and not bucket_allowed(args.bucket, args.no_delete):
+        mode = "additive (--no-delete)" if args.no_delete else "delete-sync"
+        allow = _ADDITIVE_MODE_ALLOWLIST if args.no_delete else _DELETE_MODE_ALLOWLIST
+        print(
+            f"Error: bucket '{args.bucket}' is not allowed in {mode} mode "
+            f"(allowed: {', '.join(sorted(allow))}). Delete-sync mode lists the "
+            f"whole bucket and deletes orphans, so it is refused on shared "
+            f"buckets; the manifests bucket is writable only via --no-delete.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     # Mutual exclusion: copy-from ignores source_dir; plain upload requires it.
     if args.copy_from is None and args.source_dir is None:
@@ -552,7 +634,7 @@ def _main_upload_mode(args, endpoint, access_key, secret_key):
     # Collect files
     print(f"[{time.strftime('%H:%M:%S')}] Scanning {args.source_dir}...",
           flush=True)
-    raw_files = collect_files(args.source_dir)
+    raw_files = collect_files(args.source_dir, key_prefix=args.prefix)
     print(f"[{time.strftime('%H:%M:%S')}] Scan complete: "
           f"{len(raw_files):,} files", flush=True)
     total_size = sum(os.path.getsize(p) for p, _ in raw_files)
@@ -585,7 +667,7 @@ def _main_upload_mode(args, endpoint, access_key, secret_key):
             return 0
         s3 = _build_s3_client(endpoint, access_key, secret_key,
                               args.concurrency)
-        remote_etags = list_remote_etags(s3, args.bucket)
+        remote_etags = list_remote_etags(s3, args.bucket, prefix=args.prefix or None)
         to_upload, to_skip, to_delete = diff_files(local_files, remote_etags)
         print(
             f"r2-upload mode=dry-run would_upload={len(to_upload)} "
@@ -614,7 +696,7 @@ def _main_upload_mode(args, endpoint, access_key, secret_key):
     if args.diff:
         print(f"[{time.strftime('%H:%M:%S')}] Listing remote bucket "
               f"{args.bucket} for diff...", flush=True)
-        remote_etags = list_remote_etags(s3, args.bucket)
+        remote_etags = list_remote_etags(s3, args.bucket, prefix=args.prefix or None)
         print(f"[{time.strftime('%H:%M:%S')}] Remote list complete: "
               f"{len(remote_etags):,} keys", flush=True)
         to_upload, to_skip, to_delete = diff_files(local_files, remote_etags)
@@ -693,7 +775,19 @@ def _main_upload_mode(args, endpoint, access_key, secret_key):
     # --- Delete pass (subject to safety cap) -------------------------------
     deleted = 0
     cap_aborted = False
-    if to_delete:
+    if to_delete and args.no_delete:
+        # Additive mode: orphans (remote keys absent locally — e.g. renamed or
+        # deleted records) are SURFACED for review but never removed. Manual,
+        # pattern-targeted pruning after a dry-run is the removal path.
+        print(f"[{time.strftime('%H:%M:%S')}] Additive (--no-delete): "
+              f"{len(to_delete):,} orphan key(s) present remotely but absent "
+              f"locally under prefix '{args.prefix or '/'}' — NOT deleted.",
+              flush=True)
+        for k in to_delete[:50]:
+            print(f"  orphan: {k}", flush=True)
+        if len(to_delete) > 50:
+            print(f"  ... and {len(to_delete) - 50:,} more", flush=True)
+    elif to_delete:
         proceed, delete_list = apply_safety_cap(
             to_delete, len(remote_etags), args.confirm_deletes
         )

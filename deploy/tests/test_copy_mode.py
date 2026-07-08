@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Unit Tests for upload-to-r2.py Bucket-to-Bucket Copy Mode
+Unit Tests for upload-to-b2.py Bucket-to-Bucket Copy Mode
 
 These tests exercise the `copy_objects_batch` helper that powers the
 staging-to-production promotion workflow. The assertions cover the
@@ -20,7 +20,7 @@ Version: v1.0.0
 """
 
 
-def test_copy_objects_batch_copies_all(upload_to_r2, s3_client,
+def test_copy_objects_batch_copies_all(upload_to_b2, s3_client,
                                        src_bucket, dst_bucket):
     keys = [f"page-{i}.html" for i in range(5)]
     for k in keys:
@@ -30,7 +30,7 @@ def test_copy_objects_batch_copies_all(upload_to_r2, s3_client,
             Body=f"<html>{k}</html>".encode("utf-8"),
             ContentType="text/html",
         )
-    result = upload_to_r2.copy_objects_batch(
+    result = upload_to_b2.copy_objects_batch(
         s3_client, src_bucket, dst_bucket, keys, concurrency=4
     )
     assert result["copied"] == 5
@@ -41,14 +41,14 @@ def test_copy_objects_batch_copies_all(upload_to_r2, s3_client,
     assert head["ResponseMetadata"]["HTTPStatusCode"] == 200
 
 
-def test_copy_objects_batch_handles_missing_src_key(upload_to_r2, s3_client,
+def test_copy_objects_batch_handles_missing_src_key(upload_to_b2, s3_client,
                                                     src_bucket, dst_bucket):
     # Seed the source with only 1 of 3 keys; the other 2 should fail to
     # copy and be surfaced in failed_keys.
     s3_client.put_object(Bucket=src_bucket, Key="present.html",
                          Body=b"<html></html>")
     keys = ["present.html", "missing-a.html", "missing-b.html"]
-    result = upload_to_r2.copy_objects_batch(
+    result = upload_to_b2.copy_objects_batch(
         s3_client, src_bucket, dst_bucket, keys, concurrency=2
     )
     assert result["copied"] == 1
@@ -57,7 +57,7 @@ def test_copy_objects_batch_handles_missing_src_key(upload_to_r2, s3_client,
     assert failed_key_names == ["missing-a.html", "missing-b.html"]
 
 
-def test_copy_objects_batch_preserves_metadata(upload_to_r2, s3_client,
+def test_copy_objects_batch_preserves_metadata(upload_to_b2, s3_client,
                                                src_bucket, dst_bucket):
     """copy_object with MetadataDirective unset defaults to COPY,
     which carries the source ContentType onto the destination."""
@@ -68,7 +68,7 @@ def test_copy_objects_batch_preserves_metadata(upload_to_r2, s3_client,
         ContentType="text/html",
         CacheControl="public, max-age=3600",
     )
-    result = upload_to_r2.copy_objects_batch(
+    result = upload_to_b2.copy_objects_batch(
         s3_client, src_bucket, dst_bucket, ["page.html"], concurrency=1
     )
     assert result["copied"] == 1
@@ -78,9 +78,9 @@ def test_copy_objects_batch_preserves_metadata(upload_to_r2, s3_client,
     assert dst_head["CacheControl"] == "public, max-age=3600"
 
 
-def test_copy_objects_batch_empty_keys(upload_to_r2, s3_client,
+def test_copy_objects_batch_empty_keys(upload_to_b2, s3_client,
                                        src_bucket, dst_bucket):
-    result = upload_to_r2.copy_objects_batch(
+    result = upload_to_b2.copy_objects_batch(
         s3_client, src_bucket, dst_bucket, [], concurrency=4
     )
     assert result == {
