@@ -1,4 +1,4 @@
-# Cloudflare Worker for serving zasqua.org from R2.
+# Cloudflare Worker for serving zasqua.org from Backblaze B2.
 #
 # account_id is read from the CLOUDFLARE_ACCOUNT_ID env var — not stored here
 # because this repo is public. Set it in your shell profile or pass it inline:
@@ -25,6 +25,16 @@ compatibility_date = "2025-01-01"
 [[r2_buckets]]
 binding = "SITE"
 bucket_name = "zasqua-site"
+
+# B2 storage origin (R2 -> B2 transition, 2026-07). When SITE_ORIGIN is set,
+# the Worker fetches the site over HTTP from the public Backblaze B2 bucket
+# instead of the R2 SITE binding above. FLIPPED 2026-07-08: production now
+# serves from B2. Rollback is a config-only change — comment this line out and
+# redeploy; the R2 SITE binding this environment still carries takes back over.
+# The transition covers the site only. The value is the B2 native public
+# download base URL (no trailing slash), from this account's downloadUrl.
+[vars]
+SITE_ORIGIN = "https://f001.backblazeb2.com/file/zasqua-site"
 
 # Route staging.zasqua.org/* attached via Cloudflare dashboard (matches
 # prod convention — wrangler.toml stays host-agnostic). Dashboard: Workers
