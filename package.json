@@ -1,6 +1,6 @@
 {
   "name": "zasqua-neogranadina",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Zasqua: open-source archival platform for hosting and discovering digitized historical documents.",
   "private": true,
   "scripts": {
@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@tailwindcss/cli": "4.2.2",
-    "@ucsb-ampl/zasqua": "^1.4.0",
+    "@ucsb-ampl/zasqua": "^1.4.1",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "hugo-extended": "0.160.1",
