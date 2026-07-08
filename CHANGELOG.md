@@ -2,6 +2,16 @@
 
 All notable changes to Zasqua — the Neogranadina archive at [zasqua.org](https://zasqua.org) — are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This is the **instance** changelog (the deployed site); the publishing engine has its own changelog at [`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua).
 
+## [1.2.1] — 2026-07-07
+
+Maintenance release. Takes the Zasqua engine 1.4.1, sharpens static-asset caching, and moves the site's object storage to Backblaze B2. The site's content, URLs, and interface are unchanged.
+
+### Changed
+
+- **Updated to the Zasqua engine 1.4.1** (from 1.4.0), pinned in `package.json`; the colophon now reports the engine as 1.4.1. This carries the engine's search refinement: very short free-text terms (under three characters) are no longer sent to Pagefind, so a short, common fragment no longer triggers a slow full-corpus ranking pass. Filter selections are unaffected. See the [engine changelog](https://github.com/UCSB-AMPLab/zasqua/blob/main/CHANGELOG.md).
+- **Static assets carry correct cache lifetimes.** Pagefind's content-hashed index chunks are now served as immutable with a one-year lifetime, while its versioned runtime files use a shorter seven-day window — improving repeat-visit load times with no risk of stale search data.
+- **Site served from Backblaze B2.** The deployed site's object storage moved from Cloudflare R2 to Backblaze B2. This is an infrastructure change only; content, URLs, and behaviour are unchanged.
+
 ## [1.2.0] — 2026-07-06
 
 Engine uptake. The site moves from Zasqua engine 1.2.0 to 1.4.0. The Neogranadina overlay itself is unchanged — only the pinned engine version — so the changes below are the engine's, surfaced on this site. See the [engine changelog](https://github.com/UCSB-AMPLab/zasqua/blob/main/CHANGELOG.md) for the full engine history.

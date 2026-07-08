@@ -1,4 +1,4 @@
-# Build and deploy the Neogranadina instance to R2
+# Build and deploy the Neogranadina instance to R2 or B2
 #
 # Standalone-era deploy: the instance consumes the published engine
 # (@ucsb-ampl/zasqua) from the npm registry, so `npm ci` pulls the engine,
@@ -9,11 +9,21 @@
 # exports in) into exports/, then `zasqua build` validates them and runs the
 # pipeline (precompute, derive-children, enrich, Hugo, Pagefind).
 #
-# target_bucket is the only staging/production switch: it defaults to
+# target_bucket is the staging/production switch: it defaults to
 # zasqua-staging (-> staging.zasqua.org) and accepts zasqua-site for a direct
 # production deploy. There is no separate promote workflow; a staging ->
 # production promote is a bucket-to-bucket copy run with upload-to-r2.py
 # (--copy-from zasqua-staging zasqua-site).
+#
+# storage_backend selects which uploader runs (R2 -> B2 transition, 2026-07).
+# Default r2 keeps the historical behaviour: the proven, untouched
+# upload-to-r2.py signs against Cloudflare R2. Set b2 to run its generalized
+# sibling upload-to-b2.py, which signs against Backblaze B2's S3-compatible
+# API (only the endpoint, credentials, and signing region differ — see
+# upload-to-b2.py's resolve_s3_config). Keeping R2 on its own untouched script
+# makes it a byte-for-byte rollback target through the transition; after
+# cutover the R2 script retires. The bucket NAME is the same on either store
+# (they are mirrored), so target_bucket is unchanged.
 #
 # Manual trigger only (workflow_dispatch). Runs on ubicloud-standard-8: Hugo's
 # working set at ~191K pagesources peaks near 9.4 GB, which OOMs GitHub's free
@@ -23,27 +33,44 @@
 #   B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY   (read b2://zasqua-export)
 #   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, CLOUDFLARE_ACCOUNT_ID
 #   CF_API_TOKEN, CF_ZONE_ID                    (cache purge)
+#   B2_S3_ENDPOINT, B2_S3_REGION                (only when storage_backend=b2;
+#                                                e.g. https://s3.us-west-004.
+#                                                backblazeb2.com and us-west-004)
+#   B2_SITE_KEY_ID, B2_SITE_APPLICATION_KEY  (only when storage_backend=b2;
+#                                                a B2 app key scoped to write the
+#                                                zasqua-site bucket — used as the
+#                                                S3 access key / secret)
 #
 # Inputs:
-#   target_bucket — R2 bucket to deploy to. Default zasqua-staging.
-#   dry_run       — run build + diff pass, print would-upload / would-delete,
-#                   skip PUT / DELETE / purge.
-#   dev_limit     — optional integer cap on records (fast iteration). Unset =
-#                   full corpus. A capped build is NOT a valid production
-#                   artefact.
+#   target_bucket   — bucket to deploy to (same name on R2 and B2). Default
+#                     zasqua-staging.
+#   storage_backend — r2 (default) or b2. Selects the object store; see header.
+#   dry_run         — run build + diff pass, print would-upload / would-delete,
+#                     skip PUT / DELETE / purge.
+#   dev_limit       — optional integer cap on records (fast iteration). Unset =
+#                     full corpus. A capped build is NOT a valid production
+#                     artefact.
 #
-# Version: v1.1.0
+# Version: v1.2.0
 
-name: Build and deploy to R2
+name: Build and deploy to R2 or B2
 
 on:
   workflow_dispatch:
     inputs:
       target_bucket:
-        description: "R2 bucket to deploy to. Leave as default for staging."
+        description: "Bucket to deploy to (same name on R2 and B2). Leave as default for staging."
         required: true
         type: string
         default: zasqua-staging
+      storage_backend:
+        description: "Object store to deploy to. r2 (default) or b2."
+        required: false
+        type: choice
+        options:
+          - r2
+          - b2
+        default: r2
       dry_run:
         description: "Build + diff pass, print would-upload / would-delete, skip PUT / DELETE / purge."
         required: false
@@ -62,7 +89,7 @@ on:
 # Serialise deploys per bucket so concurrent dispatches do not race on the
 # R2 LIST / PUT / DELETE pool.
 concurrency:
-  group: deploy-${{ inputs.target_bucket }}
+  group: deploy-${{ inputs.storage_backend }}-${{ inputs.target_bucket }}
   cancel-in-progress: false
 
 jobs:
@@ -96,7 +123,7 @@ jobs:
         # lands in node_modules/.bin.
         run: npm ci
 
-      - name: Deploy script unit tests (upload-to-r2 pytest suite)
+      - name: Deploy script unit tests (upload-to-b2 pytest suite)
         # moto[s3] mocks the S3 API in process — no real R2 credentials or
         # network. Cheap fail-fast guard before the expensive build.
         run: |
@@ -143,15 +170,41 @@ jobs:
         # sitemap.xml as a sitemap index. Idempotent; skips when under 45K.
         run: python3 deploy/shard-sitemap.py
 
-      - name: Deploy to R2 (${{ inputs.target_bucket }})
+      - name: Deploy site (${{ inputs.target_bucket }} on ${{ inputs.storage_backend }})
         id: upload
         env:
           PYTHONUNBUFFERED: "1"
+          STORAGE_BACKEND: ${{ inputs.storage_backend }}
+          # R2 (default backend) credentials.
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          # B2 credentials — consumed only when storage_backend=b2. Absent
+          # secrets resolve to empty strings, which the upload script rejects
+          # with a clear "must be set" error, so a b2 run without them fails
+          # loudly rather than writing nowhere.
+          B2_S3_ENDPOINT: ${{ secrets.B2_S3_ENDPOINT }}
+          B2_S3_REGION: ${{ secrets.B2_S3_REGION }}
+          B2_S3_ACCESS_KEY_ID: ${{ secrets.B2_SITE_KEY_ID }}
+          B2_S3_SECRET_ACCESS_KEY: ${{ secrets.B2_SITE_APPLICATION_KEY }}
         run: |
           set -o pipefail
+          # Select the uploader by backend. This is deliberately a choice of
+          # SCRIPT, not just of credentials: the r2 path runs the untouched,
+          # proven upload-to-r2.py with the R2_* environment (the byte-for-byte
+          # rollback target during the transition), while the b2 path runs its
+          # generalized sibling upload-to-b2.py with the generic S3_* variables
+          # exported from the B2 secrets. After cutover the R2 script retires.
+          if [ "$STORAGE_BACKEND" = "b2" ]; then
+            echo "::notice::storage_backend=b2 — deploying via upload-to-b2.py (Backblaze B2)."
+            export S3_ENDPOINT="$B2_S3_ENDPOINT"
+            export S3_REGION="$B2_S3_REGION"
+            export S3_ACCESS_KEY_ID="$B2_S3_ACCESS_KEY_ID"
+            export S3_SECRET_ACCESS_KEY="$B2_S3_SECRET_ACCESS_KEY"
+            UPLOAD_SCRIPT=deploy/upload-to-b2.py
+          else
+            UPLOAD_SCRIPT=deploy/upload-to-r2.py
+          fi
           DRY_RUN_FLAG=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             DRY_RUN_FLAG="--dry-run"
@@ -159,7 +212,7 @@ jobs:
           fi
           CONFIRM_FLAG=""
           [ "${{ inputs.confirm_deletes }}" = "true" ] && CONFIRM_FLAG="--confirm-deletes"
-          python3 deploy/upload-to-r2.py public "${{ inputs.target_bucket }}" \
+          python3 "$UPLOAD_SCRIPT" public "${{ inputs.target_bucket }}" \
             --concurrency 100 \
             --diff \
             $CONFIRM_FLAG \
@@ -229,4 +282,4 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-# Version: v1.1.0 (instance owns the B2 fetch; engine is storage-agnostic)
+# Version: v1.2.0 (storage_backend switch: deploy the site to R2 or B2)

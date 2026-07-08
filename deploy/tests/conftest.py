@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Pytest Fixtures for upload-to-r2 Unit Tests
+Pytest Fixtures for upload-to-b2 Unit Tests
 
-This module wires the test suite for `instance/deploy/upload-to-r2.py`
+This module wires the test suite for `deploy/upload-to-b2.py`
 into pytest. The script file name contains a hyphen so Python cannot
-import it with the usual `import upload_to_r2` syntax —
+import it with the usual `import upload_to_b2` syntax —
 `importlib.util.spec_from_file_location` loads it as a module anyway,
-and the `upload_to_r2` session-scoped fixture exposes that module to
+and the `upload_to_b2` session-scoped fixture exposes that module to
 every test file.
 
 The moto library is used in place of a live R2 or MinIO endpoint:
@@ -31,17 +31,17 @@ import pytest
 from moto import mock_aws
 
 SCRIPT_PATH = (
-    Path(__file__).resolve().parents[1] / "upload-to-r2.py"
+    Path(__file__).resolve().parents[1] / "upload-to-b2.py"
 )
 
 
 @pytest.fixture(scope="session")
-def upload_to_r2():
-    """Load instance/deploy/upload-to-r2.py as a module so tests can call its
+def upload_to_b2():
+    """Load deploy/upload-to-b2.py as a module so tests can call its
     helpers directly. The `if __name__ == "__main__": main()` guard at the
     bottom of the file means importing never triggers a real upload."""
     spec = importlib.util.spec_from_file_location(
-        "upload_to_r2", SCRIPT_PATH
+        "upload_to_b2", SCRIPT_PATH
     )
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)

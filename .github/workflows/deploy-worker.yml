@@ -1,0 +1,87 @@
+# Deploy the Cloudflare Worker that serves the site
+#
+# Separate from deploy.yml (which builds the site and uploads it to the
+# object store): the Worker is code + config only, deployed with wrangler.
+# This workflow exists so the Worker can be deployed through CI — the same
+# way the site is — instead of from a developer's machine, keeping the
+# Cloudflare credential as a GitHub secret rather than on a laptop.
+#
+# This is the production repository, so production is the default target: a
+# plain `wrangler deploy` ships worker.js with the top-level (production)
+# bindings and vars from wrangler.toml. The staging option is kept for
+# symmetry with deploy.yml, but staging.zasqua.org is normally deployed from
+# the private instance dev repo — deploying staging from here just re-ships
+# the same worker.js against the staging bindings.
+#
+# The production cutover to B2 happens here: once the site has been uploaded
+# to the B2 zasqua-site bucket (deploy.yml with storage_backend=b2) and
+# SITE_ORIGIN has been set on the production env in wrangler.toml, running
+# this workflow against production is what flips live serving from R2 to B2.
+# Rollback is the inverse: drop SITE_ORIGIN, run this again.
+#
+# What it does: `wrangler deploy` (production) or `wrangler deploy --env
+# staging`. No build step; wrangler reads worker.js directly.
+#
+# Required repository secrets:
+#   CLOUDFLARE_API_TOKEN  — a token with Workers Scripts:Edit (plus Account
+#                           Settings:Read, and Workers R2 Storage:Edit for the
+#                           R2 SITE binding). wrangler reads it from this env
+#                           var automatically.
+#   CLOUDFLARE_ACCOUNT_ID — the account the Worker lives in (wrangler.toml
+#                           reads account_id from this env var).
+#
+# Manual trigger only (workflow_dispatch).
+#
+# Version: v1.0.0
+
+name: Deploy the Worker
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Worker environment to deploy."
+        required: true
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
+
+concurrency:
+  group: deploy-worker-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Deploy Worker (${{ inputs.environment }})
+        working-directory: deploy/worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # Production is the top-level wrangler config (no --env); staging is
+          # the named environment. Anything else is a typo — fail loudly.
+          case "${{ inputs.environment }}" in
+            production)
+              npx --yes wrangler deploy
+              ;;
+            staging)
+              npx --yes wrangler deploy --env staging
+              ;;
+            *)
+              echo "::error::Unknown environment '${{ inputs.environment }}'."
+              exit 1
+              ;;
+          esac

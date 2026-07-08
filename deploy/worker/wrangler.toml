@@ -26,10 +26,6 @@ compatibility_date = "2025-01-01"
 binding = "SITE"
 bucket_name = "zasqua-site"
 
-[[r2_buckets]]
-binding = "TILES"
-bucket_name = "zasqua-map-tiles"
-
 # Route staging.zasqua.org/* attached via Cloudflare dashboard (matches
 # prod convention — wrangler.toml stays host-agnostic). Dashboard: Workers
 # & Pages → zasqua-staging → Triggers → Custom Domains → Add Custom Domain.
@@ -45,11 +41,19 @@ name = "zasqua-staging"
 binding = "SITE"
 bucket_name = "zasqua-staging"
 
-[[env.staging.r2_buckets]]
-binding = "TILES"
-bucket_name = "zasqua-map-tiles"
-
 [env.staging.vars]
 STAGING = "true"
 
-# Version: v1.0.1
+# B2 storage origin (R2 -> B2 transition, 2026-07). When SITE_ORIGIN is set,
+# the Worker fetches the site over HTTP from the public Backblaze B2 bucket
+# instead of the R2 SITE binding above. FLIPPED 2026-07-07: staging now serves
+# from B2. Rollback is a config-only change — comment this line out and
+# redeploy, and the R2 SITE binding the environment still carries takes back
+# over. The transition covers the site only.
+#
+# The value is the B2 native public download base URL (no trailing slash); the
+# f001 download host is this account's downloadUrl from `b2 account get`. The
+# bucket is public.
+SITE_ORIGIN = "https://f001.backblazeb2.com/file/zasqua-staging"
+
+# Version: v1.2.0
