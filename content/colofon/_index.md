@@ -74,7 +74,7 @@ Zasqua es un sitio estático alojado en Cloudflare. Cada página HTML se genera 
 - **Mapas:** [MapLibre GL JS](https://maplibre.org/) con mapa base de [MapTiler](https://www.maptiler.com/)
 - **Visor de imágenes:** [TIFY](https://tify.rocks/) — visor IIIF con visualización de zoom profundo; imágenes servidas como mosaicos estáticos IIIF Level 0
 - **Estilos:** [Tailwind CSS](https://tailwindcss.com/) v4
-- **Alojamiento:** [Cloudflare Workers](https://workers.cloudflare.com/) + [Cloudflare R2](https://www.cloudflare.com/products/r2/)
+- **Alojamiento:** [Cloudflare Workers](https://workers.cloudflare.com/) al frente de [Backblaze B2](https://www.backblaze.com/b2/)
 - **Almacenamiento de exportaciones:** [Backblaze B2](https://www.backblaze.com/b2/)
 - **Integración continua:** GitHub Actions mediante [Ubicloud](https://www.ubicloud.com/)
 
