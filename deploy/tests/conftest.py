@@ -20,7 +20,10 @@ never hit the network, and run in milliseconds — exactly what this
 test suite needs. The diff, safety-cap, multipart-ETag, and copy-mode
 paths are all verified without side effects.
 
-Version: v1.0.0
+The `build_redirects` fixture does the same for `deploy/build-redirects.py`,
+which needs no mocks: its tests write small export files to `tmp_path`.
+
+Version: v1.3.0
 """
 
 import importlib.util
@@ -32,6 +35,11 @@ from moto import mock_aws
 
 SCRIPT_PATH = (
     Path(__file__).resolve().parents[1] / "upload-to-b2.py"
+)
+
+
+REDIRECTS_PATH = (
+    Path(__file__).resolve().parents[1] / "build-redirects.py"
 )
 
 
@@ -71,3 +79,30 @@ def dst_bucket(s3_client):
     """Create an empty destination bucket inside the active moto mock."""
     s3_client.create_bucket(Bucket="zasqua-site-test")
     return "zasqua-site-test"
+
+
+@pytest.fixture(scope="session")
+def build_redirects():
+    """Load deploy/build-redirects.py as a module (hyphenated file name)."""
+    spec = importlib.util.spec_from_file_location(
+        "build_redirects", REDIRECTS_PATH
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+FETCH_EXPORT_PATH = (
+    Path(__file__).resolve().parents[1] / "fetch-export-r2.py"
+)
+
+
+@pytest.fixture(scope="session")
+def fetch_export():
+    """Load deploy/fetch-export-r2.py as a module (hyphenated file name)."""
+    spec = importlib.util.spec_from_file_location(
+        "fetch_export", FETCH_EXPORT_PATH
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
