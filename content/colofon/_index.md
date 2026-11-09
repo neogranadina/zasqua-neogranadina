@@ -3,9 +3,12 @@
 #
 # This is the Neogranadina colophon, authored as a Hugo markdown content
 # page. Deployers edit the colophon HERE, as content, rather than in a
-# theme template: every section below (credits, version, represented
-# archives, citation, technology, accessibility, privacy, license,
-# contact) is institution-specific prose, not engine chrome.
+# theme template: every section below (version, technology,
+# accessibility, privacy) is institution-specific prose, not engine
+# chrome. The publisher, the represented archives, the citation, the
+# license and the contact are not written here: the engine draws them
+# after this text, from publisher.json (citation_template.site,
+# terms_of_use, email) and repositories.json.
 #
 # The engine base template (themes/base/layouts/colofon/list.html)
 # renders this page's .Content inside a prose-styled article. Three
@@ -25,45 +28,22 @@
 #
 # Spanish is verbatim es-CO deployment content; do not translate.
 #
-# The logo uses a raw <img> with Tailwind sizing classes (not a Markdown
-# image) so the pomegranate renders at 200px, matching the prior layout-
-# rendered colophon; goldmark unsafe=true permits the raw HTML.
+# The Neogranadina seal above the text is placed by this Markdown, in ink
+# (#1c1917), 300 px wide and centred; the engine template draws no mark of
+# its own here. The engine section at the end of the page is added by the
+# engine template, not written in this file.
 #
-# Version: v1.1.0
+# Version: v1.3.0
 title: "Colofón"
 ---
 
-<img src="/img/zasqua-3-burgundy-sm.svg" alt="Zasqua" class="block max-w-[200px] mx-auto pb-8">
+<img src="/img/neogranadina-seal.svg" alt="Neogranadina" class="block mx-auto pb-8" style="width: 300px">
 
 Zasqua es el archivo digital de [Neogranadina](https://neogranadina.org) y sus instituciones aliadas: reúne materiales de archivo, libros, revistas e instrumentos de consulta digitalizados y sistematizados.
 
 ## Versión y código
 
-Esta es la versión **{{< version >}}** de Zasqua, el archivo de Neogranadina. Su código fuente está en [neogranadina/zasqua-neogranadina](https://github.com/neogranadina/zasqua-neogranadina); puede consultar las [notas de esta versión](https://github.com/neogranadina/zasqua-neogranadina/releases/tag/v{{< version >}}) y el [historial completo](https://github.com/neogranadina/zasqua-neogranadina/blob/main/CHANGELOG.md).
-
-Zasqua funciona sobre el motor de publicación de archivos digitales del mismo nombre, Zasqua, versión **{{< engine-version >}}** — software de código abierto (AGPL-3.0) desarrollado por el [Laboratorio de Archivos, Memoria y Preservación (AMPL)](https://ampl.clair.ucsb.edu) de la Universidad de California, Santa Bárbara, con código fuente en [UCSB-AMPLab/zasqua](https://github.com/UCSB-AMPLab/zasqua).
-
-## Archivos representados
-
-Zasqua reúne materiales digitalizados de cinco instituciones aliadas en Colombia y Perú:
-
-- [Archivo Histórico de Rionegro](/co-ahr/) — Rionegro, Colombia
-- [Archivo Histórico Regional de Boyacá](/co-ahrb/) — Tunja, Colombia
-- [Archivo Histórico del Juzgado del Circuito de Istmina](/co-ahjci/) — Istmina, Colombia
-- [Centro de Investigaciones Históricas José María Arboleda Llorente](/co-cihjml/), Universidad del Cauca — Popayán, Colombia
-- [Biblioteca Nacional del Perú](/pe-bn/) — Lima, Perú
-
-## Cómo citar
-
-**Plataforma completa:**
-
-> *Zasqua: plataforma de consulta de materiales de archivo* (v{{< version >}}). Fundación Histórica Neogranadina y Laboratorio de Archivos, Memoria y Preservación (AMPL), Universidad de California, Santa Bárbara, {{< year >}}. https://zasqua.org
-
-**Descripción específica:** use el identificador canónico que aparece en la sección "Control" de cada descripción, por ejemplo:
-
-> *Escritura de compraventa, 1723* (co-ahr-007-d015). Archivo Histórico de Rionegro, consultado en Zasqua. https://zasqua.org/co-ahr-007-d015/
-
-Formato genérico; adapte a las convenciones de su disciplina — Chicago, APA, MLA, ISO 690, etc.
+Esta es la versión **{{< version >}}** de Zasqua, el archivo de Neogranadina. Su código fuente está en [neogranadina/zasqua-neogranadina](https://github.com/neogranadina/zasqua-neogranadina); puede consultar las [notas de esta versión](https://github.com/neogranadina/zasqua-neogranadina/releases/tag/v{{< version >}}) y el [historial completo](https://github.com/neogranadina/zasqua-neogranadina/blob/main/CHANGELOG.md). Este código y el del motor de publicación se distribuyen bajo la licencia [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html). Si encuentra un error en el sitio, [repórtelo en GitHub](https://github.com/neogranadina/zasqua-neogranadina/issues).
 
 ## Tecnología
 
@@ -89,12 +69,3 @@ Con Zasqua buscamos que cualquier persona pueda consultar el archivo sin barrera
 Zasqua no utiliza *cookies* ni almacena información personal. El sitio emplea [Cloudflare Web Analytics](https://www.cloudflare.com/web-analytics/) para recopilar estadísticas agregadas de uso — esta herramienta no utiliza *cookies*, no crea identificadores únicos del navegador y no comparte datos con terceros.
 
 Las búsquedas se ejecutan localmente en su navegador (motor Pagefind en WebAssembly); ninguna consulta se envía a nuestros servidores. Los registros de acceso del CDN se conservan únicamente con fines operativos, en forma agregada.
-
-## Licencia
-
-El código de Zasqua y de su motor de publicación se publica bajo la licencia [AGPL-3.0](https://www.gnu.org/licenses/agpl-3.0.html). Las descripciones archivísticas, los metadatos y las imágenes digitalizadas se publican bajo las condiciones específicas de cada archivo aliado — consulte la sección "Condiciones de reproducción" de cada descripción.
-
-## Contacto
-
-- General: [contacto@neogranadina.org](mailto:contacto@neogranadina.org)
-- Reportar un error: [GitHub Issues](https://github.com/neogranadina/zasqua-neogranadina/issues)
