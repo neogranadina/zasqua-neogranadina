@@ -209,40 +209,19 @@ jobs:
           python3 deploy/fetch-export-r2.py --output-dir exports
           ls -lh exports/descriptions.json exports/repositories.json
 
-      - name: Build and upload the redirect table
+      - name: Build the redirect table
         # Entities, places and descriptions that have been recoded keep their
         # old addresses: the exports list each retired code on the record
         # (`former_codes`, `former_reference_codes`), and the serving Worker
         # answers an old `/<code>/` with a 301 to the new one from a KV
-        # namespace bound as REDIRECTS. This job is the one that has the
-        # exports, so it builds the table here and uploads it before the
-        # site goes out. On an export without former codes the table is
-        # empty and the upload is skipped. The token needs the Workers KV
-        # Storage edit permission. The namespace ids match
-        # deploy/worker/wrangler.toml.
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        # namespace bound as REDIRECTS. The table is built here, before the
+        # site build, so that a malformed export stops the run early; it is
+        # uploaded only after the site upload has succeeded (below), so a
+        # failed run never points an old address at a page that is not in
+        # the bucket.
         run: |
           set -o pipefail
           python3 deploy/build-redirects.py exports redirects.json | tee redirects.log
-          BUILT=$(grep -oE 'built=[0-9]+' redirects.log | head -1 | cut -d= -f2)
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            echo "::notice::dry_run=true — redirect table built, not uploaded."
-          elif [ "${BUILT:-0}" -eq 0 ]; then
-            echo "::notice::No former codes in the exports — nothing to upload."
-          else
-            case "${{ inputs.target_bucket }}" in
-              zasqua-staging) NAMESPACE_ID=1900a3f647a648bfb6705006e0d0cc7b ;;
-              zasqua-site)    NAMESPACE_ID=8b38f16d45fe443084937e12b65f81df ;;
-              *)              NAMESPACE_ID="" ;;
-            esac
-            if [ -z "$NAMESPACE_ID" ]; then
-              echo "::notice::No redirect namespace for bucket ${{ inputs.target_bucket }} — table not uploaded."
-            else
-              npx --yes wrangler kv bulk put redirects.json --namespace-id "$NAMESPACE_ID" --remote
-            fi
-          fi
 
       - name: Build site (zasqua build)
         # Validates the fetched inputs, then runs precompute-links,
@@ -445,6 +424,33 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
           echo "summary_line=$SUMMARY" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the redirect table
+        # Runs only after the site upload has succeeded. On an export without
+        # former codes the table is empty and the upload is skipped. The token
+        # needs the Workers KV Storage edit permission. The namespace ids
+        # match deploy/worker/wrangler.toml.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          BUILT=$(grep -oE 'built=[0-9]+' redirects.log | head -1 | cut -d= -f2)
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "::notice::dry_run=true — redirect table built, not uploaded."
+          elif [ "${BUILT:-0}" -eq 0 ]; then
+            echo "::notice::No former codes in the exports — nothing to upload."
+          else
+            case "${{ inputs.target_bucket }}" in
+              zasqua-staging) NAMESPACE_ID=1900a3f647a648bfb6705006e0d0cc7b ;;
+              zasqua-site)    NAMESPACE_ID=8b38f16d45fe443084937e12b65f81df ;;
+              *)              NAMESPACE_ID="" ;;
+            esac
+            if [ -z "$NAMESPACE_ID" ]; then
+              echo "::notice::No redirect namespace for bucket ${{ inputs.target_bucket }} — table not uploaded."
+            else
+              npx --yes wrangler kv bulk put redirects.json --namespace-id "$NAMESPACE_ID" --remote
+            fi
+          fi
 
       - name: Purge Cloudflare cache
         # Skip when nothing changed or on dry runs.

@@ -42,8 +42,9 @@
  *   the new path as the value. The Worker consults it only after the site
  *   origin has missed, and only for a single-segment path, so a request that
  *   hits the bucket never pays a KV read. A hit answers 301 to the new path,
- *   keeping the query string, with an empty body and a one-hour
- *   cache-control; it is not stored in the edge cache. Where REDIRECTS is
+ *   percent-encoded segment by segment, keeping the query string, with an
+ *   empty body and a one-hour cache-control; it is not stored in the edge
+ *   cache. Where REDIRECTS is
  *   not bound, or holds nothing, the 404 passes through unchanged.
  *
  *   Prod and staging share this one source file; behaviour diverges only on
@@ -134,7 +135,11 @@ export default {
         return stagingHeaders(new Response(null, {
           status: 301,
           headers: {
-            location: url.origin + target + url.search,
+            // Codes may hold `?`, `#` or non-ASCII characters; encode each
+            // segment so the Location header is valid and names the path.
+            location: url.origin +
+              target.split('/').map(encodeURIComponent).join('/') +
+              url.search,
             'cache-control': 'public, max-age=3600',
           },
         }), env);
