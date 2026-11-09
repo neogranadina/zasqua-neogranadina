@@ -17,22 +17,24 @@
  * Tailwind v4.x feature confirmed working in the spike (2026-05-29).
  *
  * Palette matches zasqua-catalogacion (Fisqua) so both surfaces read as a
- * single platform family. Named colours are in burgundy/ochre/sage/periwinkle
- * family; --color-bg is the warm off-white used site-wide.
+ * single platform family. The engine names its colour tokens by role:
+ * primary is Neogranadina's burgundy (with deep, light, dark and pale
+ * variants), secondary the ochre, tertiary the sage, accent the periwinkle,
+ * and --color-bg is the warm off-white used site-wide.
  *
- * @version v1.0.0
+ * @version v1.3.0
  */
 
 @theme {
   /* Neogranadina brand palette */
-  --color-burgundy: #8B2942;
-  --color-burgundy-deep: #6B1F33;
-  --color-burgundy-light: #B14D66;
-  --color-burgundy-dark: #4A1522;
-  --color-pale-rose: #F5E6EA;
-  --color-ochre: #C5965F;
-  --color-sage: #8A9B8E;
-  --color-periwinkle: #C9D5FF;
+  --color-primary: #8B2942;
+  --color-primary-deep: #6B1F33;
+  --color-primary-light: #B14D66;
+  --color-primary-dark: #4A1522;
+  --color-primary-pale: #F5E6EA;
+  --color-secondary: #C5965F;
+  --color-tertiary: #8A9B8E;
+  --color-accent: #C9D5FF;
   --color-bg: #FAFAF9;
 
   /* Neogranadina font stacks */
@@ -44,4 +46,4 @@
     "Times New Roman", Times, serif;
 }
 
-/* Version: v1.0.0 */
+/* Version: v1.3.0 */
