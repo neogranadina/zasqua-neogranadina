@@ -158,26 +158,49 @@ jobs:
         # upload). Lockfile-only: do not inline-install here.
         run: pip install -r deploy/requirements.txt --quiet
 
+      - name: Fetch Hugo (authenticated)
+        # The hugo-extended package downloads Hugo from GitHub releases in its
+        # postinstall, anonymously and without retrying, and the deploy runs
+        # npm ci twice (here and inside `zasqua build`). GitHub throttles
+        # anonymous release downloads under load and answers 504. This step
+        # downloads the version pinned in package-lock.json with the run's
+        # token instead, checks it against Hugo's published SHA-256, and sets
+        # HUGO_SKIP_DOWNLOAD and HUGO_BIN_PATH for every later step, so
+        # neither npm ci downloads Hugo and `hugo` runs this binary.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          command -v gh >/dev/null || { echo "::error::gh is not on this runner"; exit 1; }
+          V=$(node -p "require('./package-lock.json').packages['node_modules/hugo-extended'].version")
+          T="hugo_extended_${V}_linux-amd64.tar.gz"
+          D="$RUNNER_TEMP/hugo-bin"
+          mkdir -p "$D"
+          cd "$D"
+          for attempt in 1 2 3 4 5; do
+            gh release download "v${V}" -R gohugoio/hugo -p "$T" -p "hugo_${V}_checksums.txt" --clobber && break
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            echo "::warning::Hugo download failed (attempt $attempt of 5); retrying in 30 s"
+            sleep 30
+          done
+          grep " ${T}\$" "hugo_${V}_checksums.txt" | sha256sum -c -
+          tar -xzf "$T" hugo
+          ./hugo version
+          echo "HUGO_SKIP_DOWNLOAD=1" >> "$GITHUB_ENV"
+          echo "HUGO_BIN_PATH=$D/hugo" >> "$GITHUB_ENV"
+
       - name: Install npm dependencies
         # Pulls @ucsb-ampl/zasqua from the registry plus Hugo Extended,
         # Pagefind, and Tailwind (all instance deps). The engine's zasqua CLI
-        # lands in node_modules/.bin. The hugo-extended package downloads the
-        # Hugo binary from GitHub releases, which can answer 504 for a while,
-        # so npm ci is retried. The binary is then kept outside node_modules
-        # and every later step points at it: `zasqua build` runs npm ci again,
-        # and that second install skips the download instead of depending on
-        # GitHub a second time.
+        # lands in node_modules/.bin. Hugo itself comes from the step above.
+        # npm ci is retried in case the registry fails for a moment.
         run: |
-          for attempt in 1 2 3 4 5; do
+          for attempt in 1 2 3; do
             npm ci && break
-            if [ "$attempt" = 5 ]; then exit 1; fi
-            echo "::warning::npm ci failed (attempt $attempt of 5); retrying in 60 s"
-            sleep 60
+            if [ "$attempt" = 3 ]; then exit 1; fi
+            echo "::warning::npm ci failed (attempt $attempt of 3); retrying in 30 s"
+            sleep 30
           done
-          mkdir -p "$RUNNER_TEMP/hugo-bin"
-          cp node_modules/hugo-extended/bin/hugo "$RUNNER_TEMP/hugo-bin/hugo"
-          echo "HUGO_SKIP_DOWNLOAD=1" >> "$GITHUB_ENV"
-          echo "HUGO_BIN_PATH=$RUNNER_TEMP/hugo-bin/hugo" >> "$GITHUB_ENV"
 
       - name: Deploy script unit tests (upload-to-b2 pytest suite)
         # moto[s3] mocks the S3 API in process — no real R2 credentials or
