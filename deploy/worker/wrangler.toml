@@ -36,6 +36,15 @@ bucket_name = "zasqua-site"
 [vars]
 SITE_ORIGIN = "https://f001.backblazeb2.com/file/zasqua-site"
 
+# Redirect table: old entity, place and description codes mapped to their
+# current addresses, answered by the Worker as 301s when the site has no page
+# at the old path. The deploy workflow fills it from the exports
+# (deploy/build-redirects.py). It follows [vars] so that SITE_ORIGIN above
+# stays inside the vars table.
+[[kv_namespaces]]
+binding = "REDIRECTS"
+id = "8b38f16d45fe443084937e12b65f81df"
+
 # Route staging.zasqua.org/* attached via Cloudflare dashboard (matches
 # prod convention — wrangler.toml stays host-agnostic). Dashboard: Workers
 # & Pages → zasqua-staging → Triggers → Custom Domains → Add Custom Domain.
@@ -66,4 +75,11 @@ STAGING = "true"
 # bucket is public.
 SITE_ORIGIN = "https://f001.backblazeb2.com/file/zasqua-staging"
 
-# Version: v1.2.0
+# Staging's own redirect table, filled by the deploy workflow like the
+# production one above. It follows [env.staging.vars] so that SITE_ORIGIN
+# above stays inside the vars table.
+[[env.staging.kv_namespaces]]
+binding = "REDIRECTS"
+id = "1900a3f647a648bfb6705006e0d0cc7b"
+
+# Version: v1.3.0
