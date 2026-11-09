@@ -1,30 +1,21 @@
 # Zasqua Neogranadina instance — Hugo site configuration
 #
 # This file configures the Neogranadina overlay instance of the Zasqua
-# archive platform. It layers on top of the engine's neutral base theme
-# by selecting theme = ["neogranadina", "base"]: Hugo resolves templates,
-# assets, and content by working through that list left-to-right, so any
-# file present in the neogranadina theme takes precedence over the
-# corresponding file in the base theme.
+# archive platform. With theme = ["neogranadina", "base"] the overlay is
+# layered on the engine's neutral base theme: Hugo looks for each template,
+# asset and content file from left to right, so a file in the neogranadina
+# theme takes precedence over the same file in the base theme.
 #
-# Two Tailwind landmines this config addresses explicitly:
+# Each setting carries a short note in English and Spanish. The full
+# explanation of every setting, including what the engine does when it is
+# left out, is in the hugo.toml of the starter repository,
+# UCSB-AMPLab/zasqua-template.
 #
-#   1. `build.writeStats = true` tells Hugo to emit `hugo_stats.json`
-#      during every build. Tailwind v4's JIT engine reads that file to
-#      discover which CSS classes the rendered HTML actually uses, so
-#      the generated stylesheet includes only the classes in play. If
-#      this flag is missing, Tailwind ships a skeletal stylesheet and
-#      the site looks unstyled — with no error.
-#
-#   2. The `[module]` block below mounts `hugo_stats.json` into
-#      `assets/notwatching/hugo_stats.json`. Tailwind v4's `@source`
-#      directive respects `.gitignore`, and `hugo_stats.json` is
-#      exactly the kind of build artefact most projects reflexively
-#      gitignore — at which point Tailwind silently stops seeing it
-#      and ships an incomplete stylesheet. Mounting the file into
-#      `assets/` via Hugo modules makes it visible to the Hugo Pipes
-#      CSS pipeline regardless of what `.gitignore` says, closing
-#      the silent-failure window.
+# Tailwind: `build.writeStats = true` makes Hugo write hugo_stats.json on
+# every build, and the `[module]` block mounts it under assets/, where the
+# stylesheet's @source directive reaches it even though the file is
+# gitignored. Without either, Tailwind leaves classes out of the stylesheet
+# and reports no error.
 #
 # Secrets and infra: R2/B2 credentials, CF account/zone tokens, and
 # Wrangler secrets live in env / GitHub Actions secrets / gitignored
@@ -40,58 +31,153 @@
 # three content adapters at `content/{descripcion,entidad,lugar}/`
 # via `resources.Get` (single-file) or `resources.Match` (sharded).
 #
-# Version: v1.2.0
+# Version: v1.3.0
 
+# Address the site is published at; Hugo builds absolute links and the sitemap from it.
+# Dirección en la que se publica el sitio; Hugo arma con ella los enlaces absolutos y el mapa del sitio.
 baseURL = "https://zasqua.org/"
+# `zasqua build` overrides both values from zasqua.manifest.toml ([ui] language); they match it here.
+# `zasqua build` sobrescribe los dos valores con el idioma de zasqua.manifest.toml ([ui] language); aquí ya coinciden con él.
 languageCode = "es-CO"
 defaultContentLanguage = "es"
+# Site name, used in every <title> and wherever the interface names the site.
+# Nombre del sitio; se usa en cada <title> y en los textos de la interfaz que nombran el sitio.
 title = "Zasqua"
+# Theme chain: this overlay first, then the engine's base theme.
+# Cadena de temas: primero el tema de Neogranadina, luego el tema base del motor.
 theme = ["neogranadina", "base"]
 
-# Emit a robots.txt rendered from `layouts/robots.txt`. Hugo's
-# default is false — leaving it off means Cloudflare's zone-level
-# Managed Robots.txt is the only source of truth for crawler rules,
-# and it never includes a `Sitemap:` directive. Turning this on lets
-# our template contribute the Sitemap pointer while Cloudflare's AI-
-# bot controls still merge ahead of it at the edge.
+# Hugo writes robots.txt from the engine's template, with the Sitemap line that Cloudflare's
+# Managed Robots.txt lacks; Cloudflare still puts its AI-bot rules ahead of it at the edge.
+# Hugo genera robots.txt con la plantilla del motor, que incluye la línea Sitemap; el robots.txt que
+# administra Cloudflare (Managed Robots.txt) no la trae. Cloudflare sigue poniendo sus reglas para
+# bots de IA antes de las nuestras, en sus propios servidores.
 enableRobotsTXT = true
 
 [params]
+  # Default <meta name="description"> for pages without one of their own.
+  # Descripción por defecto (<meta name="description">) de las páginas que no tienen una propia.
   description = "Zasqua es la plataforma de consulta de materiales de archivo, libros, revistas e instrumentos de consulta digitalizados y sistematizados por Neogranadina y sus aliados."
-  version = "1.2.1"
-  # Deployer identity strings. The engine's base theme ships neutral
-  # defaults in data/ui.yaml (e.g. "Identificador", "© {year}"); each
-  # template reads `site.Params.X | default <base value>`, so these
-  # params customise individual strings WITHOUT the data-file override
-  # that Hugo's top-level-key merge would use to clobber sibling labels.
-  # The {year} token in footer_copyright is replaced at build time.
+  # This site's release number, not the engine's; the engine prints it through {{< version >}}
+  # and in place of {version} in the citation templates.
+  # Número de versión de este sitio, no del motor; el motor lo escribe donde va el
+  # shortcode {{< version >}} y lo pone en lugar de {version} en las plantillas de cita.
+  version = "1.3.0"
+  # Label of the code row on entity and place pages (else the engine's i18n labels).
+  # Etiquetas de la fila del código en las páginas de entidad y de lugar (si no se definen, el motor usa sus etiquetas de i18n).
   entity_code_label = "Identificador Neogranadina"
   place_code_label = "Identificador Neogranadina"
-  footer_copyright = "© {year} Fundación Histórica Neogranadina"
-  # MapTiler custom Topo-style basemap for /lugar/ and /lugares/ maps.
-  # Key is origin-restricted to *.zasqua.org, zasqua.org, and localhost.
+  # Footer mark { src, alt, href }, drawn white: the Neogranadina seal with its rays,
+  # linked to neogranadina.org (else publisher.json's logo_url).
+  # Marca del pie de página { src, alt, href }, que el motor dibuja en blanco: el sello de
+  # Neogranadina con sus rayos, enlazado a neogranadina.org (si no, el logo_url de
+  # publisher.json).
+  footer_logo = { src = "/img/neogranadina-seal.svg", alt = "Neogranadina", href = "https://neogranadina.org" }
+  # Footer seals after the engine credit, drawn white: the AMPL logo, without a link.
+  # This list replaces the credit logos of publisher.json.
+  # Sellos que van después del crédito del motor en el pie de página, dibujados en blanco: el logo
+  # de AMPL, sin enlace. Con esta lista, el motor no muestra los logos de los créditos de
+  # publisher.json.
+  footer_seals = [
+    { src = "/img/ampl-cropped-1.png", alt = "AMP Lab, UC Santa Barbara" },
+  ]
+  # First sentence of the footer; HTML allowed. footer_copyright is not set, since the engine
+  # takes the copyright holder from the legal name in publisher.json.
+  # Primera frase del pie de página; admite HTML. No se define footer_copyright, porque el motor
+  # toma el titular de los derechos del nombre legal de publisher.json.
+  footer_tagline = "Zasqua es el archivo digital de <a href=\"https://neogranadina.org\" target=\"_blank\" rel=\"noopener\" class=\"text-white hover:text-accent\">Neogranadina</a> y sus instituciones aliadas, desarrollado en colaboración con el <a href=\"https://ampl.clair.ucsb.edu\" target=\"_blank\" rel=\"noopener\" class=\"text-white hover:text-accent\">Laboratorio de Archivos, Memoria y Preservación (AMPL)</a> de la Universidad de California, Santa Bárbara."
+  # MapTiler basemap for the place maps: the API key (restricted to *.zasqua.org, zasqua.org
+  # and localhost), then the id of the custom Topo-style map.
+  # Mapa base de MapTiler para los mapas de lugar: la clave de la API (solo sirve en *.zasqua.org,
+  # zasqua.org y localhost) y luego el identificador del mapa propio de estilo Topo.
   maptiler_key = "vBKZJsibMDOLDhSILppQ"
   maptiler_style_id = "019da873-63fb-7cc9-8623-b0641f80a80a"
-  # Cloudflare Web Analytics beacon token (public — not a credential).
+  # Cloudflare Web Analytics token (public); the engine adds the analytics script to every page.
+  # Token de Cloudflare Web Analytics (público); el motor agrega el script de analítica a todas las páginas.
   cf_analytics_token = "bd05fe4ac01547849248727c0598306e"
-  # Neogranadina search-analytics API endpoint (public URL — not a credential).
+  # Neogranadina's search-analytics endpoint (public); a script on the search page sends it each query.
+  # URL pública de la analítica de búsqueda de Neogranadina; un script de la página de búsqueda le envía cada consulta.
   beacon_url = "https://neogranadina-dashboard.neogranadina.workers.dev/api/beacon/search"
+  # Base URL of the METS files written by `zasqua mets`, linked from description pages.
+  # URL base de los archivos METS que genera `zasqua mets`, enlazados desde las páginas de descripción.
+  mets_base_url = "https://manifests.zasqua.org/mets"
+  # METS CREATOR agent and the URL of its note; the legal name and website in publisher.json
+  # take precedence over both.
+  # Agente creador (CREATOR) de los archivos METS y URL de su nota; el nombre legal y el
+  # sitio web de publisher.json tienen prioridad sobre los dos.
+  mets_creator_name = "Fundación Histórica Neogranadina (NIT 900.861.407), Bogotá, Colombia"
+  mets_creator_url = "https://neogranadina.org"
+  # dc:rights for a record when neither the record nor its repository gives rights.
+  # Valor de dc:rights cuando ni el registro ni su repositorio indican derechos
+  # propios.
+  mets_default_rights = "Los catálogos y descripciones de Zasqua son de libre acceso."
+  # Base URL of the EAC-CPF records written by `zasqua eac`, linked from entity pages.
+  # URL base de los registros EAC-CPF que genera `zasqua eac`, enlazados desde las páginas de entidad.
+  eac_base_url = "https://manifests.zasqua.org/eac"
+  # EAC-CPF maintenance agency; the legal name in publisher.json takes precedence.
+  # Institución responsable del mantenimiento de los registros EAC-CPF; el nombre legal de publisher.json tiene prioridad.
+  eac_agency_name = "Fundación Histórica Neogranadina"
+  # ISO 639-2 code of the language of the EAC-CPF records.
+  # Código ISO 639-2 del idioma de los registros EAC-CPF.
+  eac_language_code = "spa"
+  # Base URL of the Linked Places files written by `zasqua places`, linked from place pages.
+  # URL base de los archivos Linked Places que genera `zasqua places`, enlazados desde las páginas de lugar.
+  places_base_url = "https://manifests.zasqua.org/places"
+  # Language tag declared on the place names of the Linked Places records.
+  # Etiqueta de idioma que se declara en los nombres de lugar de los registros Linked Places.
+  places_language = "es"
+  # Site logo, the pomegranate without ring and rays: home photograph (in white), search page, entity
+  # explorer. This overlay's header.html names the same file for the header.
+  # Logo del sitio, la granada sin anillo ni rayos; el motor lo muestra sobre la fotografía de la página de
+  # inicio (en blanco), en la página de búsqueda y en el explorador de entidades. En el header.html de esta
+  # instancia se indica el mismo archivo para el encabezado.
+  logo = "/img/neogranadina-pomegranate.svg"
+  # Starting points in the entity and places explorers, as { code, label }; the codes are Fisqua's.
+  # Puntos de partida de los exploradores de entidades y de lugares, en la forma { code, label }; los códigos son los de Fisqua.
+  entity_examples = [
+    { code = "ne-m95eya", label = "Real Audiencia de Quito" },
+    { code = "ne-9c2dhx", label = "Cabildo de Rionegro" },
+    { code = "ne-ywqmg5", label = "José Gabriel Túpac Amaru" },
+    { code = "ne-d4axgb", label = "Simón Bolívar" },
+  ]
+  place_examples = [
+    { code = "nl-anw2d3", label = "Santafé de Bogotá" },
+    { code = "nl-9dvnpz", label = "Cartagena" },
+    { code = "nl-f9b6mh", label = "Quito" },
+    { code = "nl-c2syhc", label = "Popayán" },
+  ]
+  # Opening view of the places explorer, [[west, south], [east, north]]: the box around Colombia
+  # the engine used before 1.6.0, instead of a fit to every place, Spain and Peru included.
+  # Vista inicial del explorador de lugares, [[oeste, sur], [este, norte]]: el recuadro de Colombia
+  # que el motor mostraba antes de la versión 1.6.0, en lugar de encuadrar todos los lugares,
+  # incluidos los de España y Perú.
+  place_explorer_bounds = [[-83.0, -5.0], [-60.0, 15.0]]
+  # Web fonts DM Sans, Crimson Text and Cormorant Garamond, named here so the site does not
+  # rely on the engine's deprecated default, which engine 2.0.0 removes.
+  # Fuentes web DM Sans, Crimson Text y Cormorant Garamond; se indican aquí para no depender
+  # del valor por defecto del motor, que está obsoleto y se elimina en la versión 2.0.0.
+  font_stylesheets = [
+    "https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Crimson+Text:wght@400;700&family=Cormorant+Garamond:wght@300;600&display=swap",
+  ]
+  # Home card settings by repository code: the Biblioteca Nacional del Perú card is linked to the
+  # Narra la Independencia collection and given its own category; the rest comes from the record.
+  # Cada tabla lleva el código de un repositorio y ajusta su tarjeta de la página de inicio: la de la
+  # Biblioteca Nacional del Perú enlaza a la colección Narra la Independencia y lleva categoría propia;
+  # lo demás se toma del registro.
+  [params.home_cards.pe-bn]
+    link = "/pe-bn-cdip/"
+    category = "Fuentes sobre la independencia del Perú"
 
+# Hugo writes hugo_stats.json, which Tailwind reads for the classes in use (see the header).
+# Hugo genera hugo_stats.json, que Tailwind lee para saber qué clases se usan (véase el
+# encabezado).
 [build]
   writeStats = true
   [build.buildStats]
     enable = true
 
-# Mount `hugo_stats.json` into the asset pipeline so Tailwind's
-# @source directive in assets/css/main.css can reach it regardless of
-# whether the file is gitignored. Without this mount, a gitignored
-# hugo_stats.json produces a silently incomplete stylesheet.
-#
-# Also mounts `zasqua.manifest.toml` as a Hugo data file so that all
-# templates can read module flags via hugo.Data.manifest.modules.*
-# without requiring a second copy of the file. The manifest key does
-# not collide with the base theme's ui.yaml (which occupies the "ui"
-# key), so the two data sources coexist without clobbering each other.
+# Mounts: assets/; hugo_stats.json under assets/ for Tailwind; the manifest as data (hugo.Data.manifest).
+# Montajes: assets/; hugo_stats.json dentro de assets/ para Tailwind; el manifiesto como datos (hugo.Data.manifest).
 [module]
   [[module.mounts]]
     source = "assets"
@@ -104,6 +190,9 @@ enableRobotsTXT = true
     source = "zasqua.manifest.toml"
     target = "data/manifest.toml"
 
+# Under `hugo server`, a change to hugo_stats.json or to a PostCSS or Tailwind config makes Hugo rebuild the CSS.
+# Mientras se ejecuta `hugo server`, un cambio en hugo_stats.json o en la configuración de PostCSS o Tailwind hace que Hugo
+# vuelva a generar el CSS.
 [[build.cachebusters]]
   source = 'assets/notwatching/hugo_stats\.json'
   target = 'css'
@@ -112,8 +201,10 @@ enableRobotsTXT = true
   source = '(postcss|tailwind)\.config\.js'
   target = 'css'
 
+# Hugo keeps raw HTML written in Markdown content.
+# Hugo conserva el HTML escrito dentro del contenido en Markdown.
 [markup]
   [markup.goldmark.renderer]
     unsafe = true
 
-# Footer: Version: v1.2.0
+# Footer: Version: v1.3.0

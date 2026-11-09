@@ -37,7 +37,7 @@
   },
   "dependencies": {
     "@tailwindcss/cli": "4.2.2",
-    "@ucsb-ampl/zasqua": "^1.4.1",
+    "@ucsb-ampl/zasqua": "^1.6.0",
     "graphology": "^0.26.0",
     "graphology-layout-forceatlas2": "^0.10.1",
     "hugo-extended": "0.160.1",

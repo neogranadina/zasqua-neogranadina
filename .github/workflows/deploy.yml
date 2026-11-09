@@ -4,10 +4,11 @@
 # (@ucsb-ampl/zasqua) from the npm registry, so `npm ci` pulls the engine,
 # Hugo Extended, Pagefind, and Tailwind together. The engine is
 # storage-agnostic — it builds from the local exports/ directory and fetches
-# nothing — so this workflow owns the data fetch: it downloads the six
-# contract files from Backblaze B2 (the bucket this instance stores its
-# exports in) into exports/, then `zasqua build` validates them and runs the
-# pipeline (precompute, derive-children, enrich, Hugo, Pagefind).
+# nothing — so this workflow owns the data fetch: it downloads Fisqua's
+# export from the R2 bucket zasqua-export (under neogranadina/) into
+# exports/, or, with export_source=b2, the six contract files of the frozen
+# Django-era export in Backblaze B2; then `zasqua build` validates them and
+# runs the pipeline (precompute, derive-children, enrich, Hugo, Pagefind).
 #
 # target_bucket is the staging/production switch: it defaults to
 # zasqua-staging (-> staging.zasqua.org) and accepts zasqua-site for a direct
@@ -30,7 +31,8 @@
 # 7 GB runner; the 8-core / 32 GB tier gives headroom and parallelism.
 #
 # Required repository secrets:
-#   B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY   (read b2://zasqua-export)
+#   B2_APPLICATION_KEY_ID, B2_APPLICATION_KEY   (read b2://zasqua-export;
+#                                                only when export_source=b2)
 #   R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, CLOUDFLARE_ACCOUNT_ID
 #   CF_API_TOKEN, CF_ZONE_ID                    (cache purge)
 #   B2_S3_ENDPOINT, B2_S3_REGION                (only when storage_backend=b2;
@@ -45,13 +47,39 @@
 #   target_bucket   — bucket to deploy to (same name on R2 and B2). Default
 #                     zasqua-staging.
 #   storage_backend — r2 (default) or b2. Selects the object store; see header.
+#   export_source   — r2 (default) or b2. Where the export files are
+#                     fetched from: Fisqua's export in the R2 bucket
+#                     zasqua-export under neogranadina/
+#                     (deploy/fetch-export-r2.py, which joins the per-fonds
+#                     description files), or the frozen Django-era export in
+#                     the Backblaze B2 bucket. r2 needs the R2_ACCESS_KEY_ID
+#                     and R2_SECRET_ACCESS_KEY secrets to have read access to
+#                     zasqua-export.
 #   dry_run         — run build + diff pass, print would-upload / would-delete,
 #                     skip PUT / DELETE / purge.
 #   dev_limit       — optional integer cap on records (fast iteration). Unset =
 #                     full corpus. A capped build is NOT a valid production
 #                     artefact.
+#   confirm_deletes — override the 5% delete safety cap on the site upload.
+#   authority_exports — also generate the METS, EAC-CPF and Linked Places
+#                     records (`zasqua mets`, `zasqua eac`, `zasqua places`,
+#                     always the full corpus) into exports-out/, and upload
+#                     each set to its prefix (mets/, eac/, places/) of the R2
+#                     manifests bucket, zasqua-manifests, whatever
+#                     target_bucket says. The upload is additive
+#                     (--no-delete): records missing locally are reported as
+#                     orphans, never deleted. dry_run applies. Because the
+#                     manifests bucket is production, the run fails unless
+#                     target_bucket is zasqua-site or dry_run is set (a dry
+#                     run against any target rehearses the diff without
+#                     writing). A real run also fails while eac_agency_name
+#                     in hugo.toml is empty. The three commands exist from
+#                     engine 1.5.0, so the input needs the @ucsb-ampl/zasqua
+#                     pin at ^1.5.0 or later; under an earlier pin a run with
+#                     it on fails at the EAC step, before any upload.
+#                     Default false.
 #
-# Version: v1.2.0
+# Version: v1.3.0
 
 name: Build and deploy to R2 or B2
 
@@ -71,6 +99,14 @@ on:
           - r2
           - b2
         default: r2
+      export_source:
+        description: "Where to fetch the export files from. r2 (default: Fisqua's export in zasqua-export/neogranadina/) or b2 (the frozen Django-era export)."
+        required: false
+        type: choice
+        options:
+          - r2
+          - b2
+        default: r2
       dry_run:
         description: "Build + diff pass, print would-upload / would-delete, skip PUT / DELETE / purge."
         required: false
@@ -82,6 +118,11 @@ on:
         type: string
       confirm_deletes:
         description: "Override the 5% delete safety cap. Needed for the first cutover deploy over a bucket still holding the old pipeline's output; leave off for routine deploys."
+        required: false
+        type: boolean
+        default: false
+      authority_exports:
+        description: "Also generate the METS, EAC-CPF and Linked Places records and upload them, additively, to the zasqua-manifests bucket on R2 (whatever target_bucket says). That bucket is production: allowed only with target_bucket=zasqua-site, or with dry_run to rehearse."
         required: false
         type: boolean
         default: false
@@ -136,6 +177,7 @@ jobs:
           echo "::warning::DEV_LIMIT=${{ inputs.dev_limit }} — building a subset; NOT a production build."
 
       - name: Fetch data from B2
+        if: inputs.export_source == 'b2'
         # The engine is storage-agnostic: `zasqua build` reads the six contract
         # files from exports/ and never fetches data itself. This instance
         # stores its exports in Backblaze B2, so it downloads them here, into
@@ -153,6 +195,34 @@ jobs:
           done
           ls -lh exports/descriptions.json exports/repositories.json
 
+      - name: Fetch data from R2 (Fisqua export)
+        # Reads neogranadina/ in the zasqua-export bucket and writes the six
+        # contract files into exports/, joining the per-fonds description
+        # files into descriptions.json. The step fails if a listed file is
+        # missing or a description id repeats across fonds.
+        if: inputs.export_source != 'b2'
+        env:
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+        run: |
+          python3 deploy/fetch-export-r2.py --output-dir exports
+          ls -lh exports/descriptions.json exports/repositories.json
+
+      - name: Build the redirect table
+        # Entities, places and descriptions that have been recoded keep their
+        # old addresses: the exports list each retired code on the record
+        # (`former_codes`, `former_reference_codes`), and the serving Worker
+        # answers an old `/<code>/` with a 301 to the new one from a KV
+        # namespace bound as REDIRECTS. The table is built here, before the
+        # site build, so that a malformed export stops the run early; it is
+        # uploaded only after the site upload has succeeded (below), so a
+        # failed run never points an old address at a page that is not in
+        # the bucket.
+        run: |
+          set -o pipefail
+          python3 deploy/build-redirects.py exports redirects.json | tee redirects.log
+
       - name: Build site (zasqua build)
         # Validates the fetched inputs, then runs precompute-links,
         # derive-children, enrich, Hugo, and Pagefind against the exports/
@@ -163,6 +233,126 @@ jobs:
           npx zasqua build
           echo "Pages: $(find public -name 'index.html' | wc -l)"
           echo "Site size: $(du -sh public | cut -f1)"
+
+      # Authority exports. The three generators read the same exports/ as the
+      # build and write outside public/, so the records never ship in the
+      # site upload: they go to the manifests bucket, which is the host
+      # mets_base_url, eac_base_url and places_base_url in hugo.toml point at.
+      # The generators ignore DEV_LIMIT and always emit the full corpus.
+      - name: Authority exports only against production
+        # zasqua-manifests serves the live site, so writing to it alongside a
+        # staging deploy would publish records ahead of the pages that link to
+        # them. A dry run lists and diffs without writing, so it may run
+        # against any target, and with no agency name. A real run needs one:
+        # the engine takes it from the legal_name in exports/publisher.json,
+        # else from eac_agency_name in hugo.toml, and without either every
+        # EAC-CPF record would fall back to the site title as its
+        # maintenance agency.
+        # The upload steps below take R2 credentials from the repository
+        # secrets. A dry run without them still passes, because the uploader
+        # lists the bucket only when it has credentials, and then reports
+        # every file as new and nothing as an orphan: a rehearsal that proves
+        # nothing. So the secrets are required here, dry run or not.
+        if: inputs.authority_exports
+        env:
+          TARGET_BUCKET: ${{ inputs.target_bucket }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          if [ -z "$R2_ACCESS_KEY_ID" ] || [ -z "$R2_SECRET_ACCESS_KEY" ]; then
+            echo "::error::R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are not set; without them the manifests upload cannot list zasqua-manifests, so even a dry run would report nothing real"
+            exit 1
+          fi
+          if [ "$TARGET_BUCKET" != "zasqua-site" ] && [ "$DRY_RUN" != "true" ]; then
+            echo "::error::authority_exports writes to zasqua-manifests, a production bucket; run it only with target_bucket=zasqua-site, or with dry_run=true to rehearse"
+            exit 1
+          fi
+          if [ "$DRY_RUN" != "true" ]; then
+            AGENCY=$(python3 deploy/agency-name.py exports hugo.toml)
+            if [ -z "$AGENCY" ]; then
+              echo "::error::no agency name: exports/publisher.json has no legal_name and eac_agency_name is empty in hugo.toml; set one before publishing EAC-CPF records"
+              exit 1
+            fi
+          fi
+
+      - name: Generate METS (zasqua mets)
+        if: inputs.authority_exports
+        env:
+          METS_DIR: exports-out/mets
+        run: |
+          npx zasqua mets
+          echo "METS files: $(find exports-out/mets -type f | wc -l)"
+
+      - name: Generate EAC-CPF (zasqua eac)
+        if: inputs.authority_exports
+        env:
+          EAC_DIR: exports-out/eac
+        run: |
+          npx zasqua eac
+          echo "EAC-CPF files: $(find exports-out/eac -type f | wc -l)"
+
+      - name: Generate Linked Places (zasqua places)
+        if: inputs.authority_exports
+        env:
+          PLACES_DIR: exports-out/places
+        run: |
+          npx zasqua places
+          echo "Linked Places files: $(find exports-out/places -type f | wc -l)"
+
+      # The manifests bucket stays on R2 whatever storage_backend says, and
+      # upload-to-r2.py writes to it only in additive mode (--prefix with
+      # --no-delete): each upload lists and diffs only its own prefix, so it
+      # never sees the sibling prefixes, and it reports orphans rather than
+      # deleting them. The uploads run before the site upload, so the site
+      # never links to records that are not yet published.
+      - name: Upload METS to zasqua-manifests/mets/
+        if: inputs.authority_exports
+        env:
+          PYTHONUNBUFFERED: "1"
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -o pipefail
+          DRY_RUN_FLAG=""
+          [ "$DRY_RUN" = "true" ] && DRY_RUN_FLAG="--dry-run"
+          python3 deploy/upload-to-r2.py exports-out/mets zasqua-manifests \
+            --prefix mets/ --no-delete --diff \
+            $DRY_RUN_FLAG | tee upload-mets.log
+
+      - name: Upload EAC-CPF to zasqua-manifests/eac/
+        if: inputs.authority_exports
+        env:
+          PYTHONUNBUFFERED: "1"
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -o pipefail
+          DRY_RUN_FLAG=""
+          [ "$DRY_RUN" = "true" ] && DRY_RUN_FLAG="--dry-run"
+          python3 deploy/upload-to-r2.py exports-out/eac zasqua-manifests \
+            --prefix eac/ --no-delete --diff \
+            $DRY_RUN_FLAG | tee upload-eac.log
+
+      - name: Upload Linked Places to zasqua-manifests/places/
+        if: inputs.authority_exports
+        env:
+          PYTHONUNBUFFERED: "1"
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ENDPOINT: https://${{ secrets.CLOUDFLARE_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -o pipefail
+          DRY_RUN_FLAG=""
+          [ "$DRY_RUN" = "true" ] && DRY_RUN_FLAG="--dry-run"
+          python3 deploy/upload-to-r2.py exports-out/places zasqua-manifests \
+            --prefix places/ --no-delete --diff \
+            $DRY_RUN_FLAG | tee upload-places.log
 
       - name: Shard sitemap.xml (keep shards under 50K URLs)
         # Hugo emits a single ~191K-URL sitemap.xml; Google caps a sitemap at
@@ -235,6 +425,33 @@ jobs:
           fi
           echo "summary_line=$SUMMARY" >> "$GITHUB_OUTPUT"
 
+      - name: Upload the redirect table
+        # Runs only after the site upload has succeeded. On an export without
+        # former codes the table is empty and the upload is skipped. The token
+        # needs the Workers KV Storage edit permission. The namespace ids
+        # match deploy/worker/wrangler.toml.
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          BUILT=$(grep -oE 'built=[0-9]+' redirects.log | head -1 | cut -d= -f2)
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            echo "::notice::dry_run=true — redirect table built, not uploaded."
+          elif [ "${BUILT:-0}" -eq 0 ]; then
+            echo "::notice::No former codes in the exports — nothing to upload."
+          else
+            case "${{ inputs.target_bucket }}" in
+              zasqua-staging) NAMESPACE_ID=1900a3f647a648bfb6705006e0d0cc7b ;;
+              zasqua-site)    NAMESPACE_ID=8b38f16d45fe443084937e12b65f81df ;;
+              *)              NAMESPACE_ID="" ;;
+            esac
+            if [ -z "$NAMESPACE_ID" ]; then
+              echo "::notice::No redirect namespace for bucket ${{ inputs.target_bucket }} — table not uploaded."
+            else
+              npx --yes wrangler kv bulk put redirects.json --namespace-id "$NAMESPACE_ID" --remote
+            fi
+          fi
+
       - name: Purge Cloudflare cache
         # Skip when nothing changed or on dry runs.
         if: steps.upload.outputs.changed == 'true' && inputs.dry_run != true
@@ -266,10 +483,16 @@ jobs:
             echo "**Target bucket:** \`${{ inputs.target_bucket }}\`"
             echo "**Dry run:** \`${{ inputs.dry_run }}\`"
             echo "**DEV_LIMIT:** \`${{ inputs.dev_limit || 'unset' }}\`"
+            echo "**Authority exports:** \`${{ inputs.authority_exports }}\`"
             echo ""
             echo "### r2-upload summary"
             echo '```'
             grep '^r2-upload ' upload.log 2>/dev/null | tail -1 || echo "(no r2-upload summary line — upload did not run or failed before emission)"
+            echo '```'
+            echo ""
+            echo "### Redirect table"
+            echo '```'
+            grep '^redirects ' redirects.log 2>/dev/null | tail -1 || echo "(no redirects summary line — the step did not run or failed before emission)"
             echo '```'
             echo ""
             echo "### Cache purge"
@@ -280,6 +503,26 @@ jobs:
             else
               echo "Skipped (no changes detected)."
             fi
+            if [ "${{ inputs.authority_exports }}" = "true" ]; then
+              echo ""
+              echo "### Authority exports (zasqua-manifests)"
+              echo ""
+              echo "| Prefix | Files generated |"
+              echo "|---|---|"
+              for d in mets eac places; do
+                if [ -d "exports-out/$d" ]; then
+                  echo "| \`$d/\` | $(find "exports-out/$d" -type f | wc -l | tr -d ' ') |"
+                else
+                  echo "| \`$d/\` | (not generated) |"
+                fi
+              done
+              echo ""
+              echo '```'
+              for d in mets eac places; do
+                echo "$d: $(grep '^r2-upload ' "upload-$d.log" 2>/dev/null | tail -1 || true)"
+              done
+              echo '```'
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
-# Version: v1.2.0 (storage_backend switch: deploy the site to R2 or B2)
+# Version: v1.3.0 (authority exports to the manifests bucket; redirect table for retired entity, place and description codes)

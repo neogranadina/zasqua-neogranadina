@@ -34,10 +34,23 @@
  *   RFC 9309) would see the Allow and ignore the later Disallow. X-Robots-Tag
  *   on every response is the reliable belt-and-braces signal.
  *
+ *   Retired addresses — entity, place and description pages whose codes
+ *   have changed keep answering at their old `/<code>/` address. The
+ *   exports record each retired code on the record itself, and the deploy
+ *   workflow (via `deploy/build-redirects.py`) loads them into a KV
+ *   namespace bound as REDIRECTS, keyed by the old path (`/ne-u3ufz/`) with
+ *   the new path as the value. The Worker consults it only after the site
+ *   origin has missed, and only for a single-segment path, so a request that
+ *   hits the bucket never pays a KV read. A hit answers 301 to the new path,
+ *   percent-encoded segment by segment, keeping the query string, with an
+ *   empty body and a one-hour cache-control; it is not stored in the edge
+ *   cache. Where REDIRECTS is
+ *   not bound, or holds nothing, the 404 passes through unchanged.
+ *
  *   Prod and staging share this one source file; behaviour diverges only on
  *   env.STAGING and the SITE_ORIGIN variable. No build step.
  *
- * @version v1.2.0
+ * @version v1.3.0
  */
 
 export default {
@@ -108,6 +121,29 @@ export default {
       response = await serveFromOrigin(env.SITE_ORIGIN, key);
     } else {
       response = await serveFromBinding(env.SITE, key);
+    }
+
+    // A miss on a single-segment path may be a retired code; look it up in
+    // the redirect table. Only after the miss, so bucket hits never read KV.
+    if (response.status === 404 && env.REDIRECTS &&
+        /^\/[^/]+\/?$/.test(decodedPathname)) {
+      const redirectKey = decodedPathname.endsWith('/')
+        ? decodedPathname
+        : decodedPathname + '/';
+      const target = await env.REDIRECTS.get(redirectKey);
+      if (target) {
+        return stagingHeaders(new Response(null, {
+          status: 301,
+          headers: {
+            // Codes may hold `?`, `#` or non-ASCII characters; encode each
+            // segment so the Location header is valid and names the path.
+            location: url.origin +
+              target.split('/').map(encodeURIComponent).join('/') +
+              url.search,
+            'cache-control': 'public, max-age=3600',
+          },
+        }), env);
+      }
     }
 
     // Store successful hits in the edge cache (non-blocking). 404s are not
@@ -239,4 +275,4 @@ function cacheControl(key) {
   return 'public, max-age=3600';
 }
 
-// Version: v1.2.0
+// Version: v1.3.0

@@ -1,0 +1,17 @@
+# Cloudflare Worker serving iiif.zasqua.org (IIIF tiles) from R2 or Backblaze B2.
+# Dual-origin: SITE_ORIGIN unset => R2 binding; set => HTTP fetch from public B2.
+# Rollback from B2 to R2 is a config-only change: unset SITE_ORIGIN, redeploy.
+
+name = "zasqua-iiif"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[[r2_buckets]]
+binding = "SITE"
+bucket_name = "zasqua-iiif-tiles"
+
+# Flipped to B2 after the tile migration was verified (2026-07):
+[vars]
+SITE_ORIGIN = "https://f001.backblazeb2.com/file/zasqua-iiif-tiles"
+
+# Version: v1.0.0

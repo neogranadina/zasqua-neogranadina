@@ -3,33 +3,35 @@
 
   Overrides the engine base header partial with Neogranadina-specific
   chrome: the "Neogranadina:" logo-text prefix, the burgundy SVG logo
-  at /img/zasqua-3-burgundy-sm.svg, and the external nav links pointing
-  to neogranadina.org/proyectos/zasqua (Acerca) and
-  neogranadina.fisqua.org (Catalogación). These are the identity items
-  that distinguish Neogranadina's deployment from a generic instance.
+  at /img/neogranadina-pomegranate.svg, and the Acerca link to
+  neogranadina.org/proyectos/zasqua. These are the identity items that
+  distinguish Neogranadina's deployment from a generic instance.
 
-  Recovered from the flat layout at commit 451fa8c and split into this
-  theme overlay per the ENGINE-04 neutral-vs-identity split.
+  The logo file is the Neogranadina pomegranate without the ring and
+  rays: a one-color SVG that sets its own burgundy at the root, because
+  an SVG loaded through <img> does not inherit the page's currentColor.
+  The wordmark next to it is text, not part of the file. hugo.toml names
+  the same file in params.logo.
 
   When composed via theme = ["neogranadina", "base"], Hugo picks this
   partial over the engine base version.
 
-  Version: v1.0.0
+  Version: v1.3.0
 */}}
 <header class="site-header">
   <div class="container">
     <a href="/" class="site-logo">
-      <img src="/img/zasqua-3-burgundy-sm.svg" alt="{{ site.Title }}">
+      <img src="/img/neogranadina-pomegranate.svg" alt="{{ site.Title }}">
       <span class="site-logo-text font-serif">Neogranadina: <strong>{{ site.Title }}</strong></span>
     </a>
     <button class="hamburger-toggle" type="button" aria-label="Menu" aria-expanded="false">
       <span class="material-symbols-outlined">menu</span>
     </button>
     <nav class="site-nav font-sans">
-      <a href="/" class="text-sm uppercase tracking-wide">{{ hugo.Data.ui.nav.home }}</a>
+      <a href="/" class="text-sm uppercase tracking-wide">{{ i18n "nav.home" }}</a>
       <div class="nav-dropdown">
         <button type="button" class="nav-dropdown-trigger text-sm uppercase tracking-wide">
-          {{ hugo.Data.ui.nav.browse }} <span class="material-symbols-outlined nav-dropdown-arrow">expand_more</span>
+          {{ i18n "nav.browse" }} <span class="material-symbols-outlined nav-dropdown-arrow">expand_more</span>
         </button>
         <div class="nav-dropdown-menu">
           <a href="/buscar/">Documentos</a>
@@ -37,13 +39,12 @@
           <a href="/lugares/">Lugares</a>
         </div>
       </div>
-      <a href="https://neogranadina.org/proyectos/zasqua" class="text-sm uppercase tracking-wide">{{ hugo.Data.ui.nav.about }}</a>
-      <a href="https://neogranadina.fisqua.org" class="text-sm uppercase tracking-wide">{{ hugo.Data.ui.nav.catalogacion }}</a>
+      <a href="https://neogranadina.org/proyectos/zasqua" class="text-sm uppercase tracking-wide">{{ i18n "nav.about" }}</a>
       <form class="header-search" action="/buscar/" method="get">
-        <input type="search" name="q" placeholder="{{ hugo.Data.ui.search.placeholder }}">
+        <input type="search" name="q" placeholder="{{ i18n "search.placeholder" }}">
         <button type="submit"><span class="material-symbols-outlined">search</span></button>
       </form>
     </nav>
   </div>
 </header>
-{{/* Version: v1.0.0 */}}
+{{/* Version: v1.3.0 */}}
