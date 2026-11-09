@@ -2,6 +2,29 @@
 
 All notable changes to Zasqua — the Neogranadina archive at [zasqua.org](https://zasqua.org) — are documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). This is the **instance** changelog (the deployed site); the publishing engine has its own changelog at [`@ucsb-ampl/zasqua`](https://github.com/UCSB-AMPLab/zasqua).
 
+## [1.3.0] — 2026-11-09
+
+The cutover to Fisqua. The site is built from the export that Fisqua publishes, on the Zasqua engine 1.6.0. Repository pages, the home cards and the colophon's citation, license and contact come from the records Fisqua publishes, and the addresses retired with the new codes redirect to the current ones.
+
+### Changed
+
+- **The site is built from Fisqua's export.** The deploy fetches the export that Fisqua publishes to the R2 bucket `zasqua-export`, under `neogranadina/`, instead of the export of the retired cataloguing backend kept in Backblaze B2 since April 2026. The `export_source=b2` input still builds from that older export.
+- **Updated to the Zasqua engine 1.6.0** (from 1.4.1), pinned in `package.json`. See the [engine changelog](https://github.com/UCSB-AMPLab/zasqua/blob/main/CHANGELOG.md).
+- **Repository pages come from the repository record.** Each repository's page takes its title, subtitle, image, place, contact details and the description of the institution from the records Fisqua publishes, instead of text written into the site's templates.
+- **Home page cards come from the repository records.** The five cards take their titles, subtitles, images and order from the records Fisqua publishes. The Narra la Independencia card still opens its collection, now set in `hugo.toml` instead of the site's templates.
+- **Settings for engine 1.6.0.** The site names its web fonts in `font_stylesheets` and the places explorer's opening view in `place_explorer_bounds` (the box around Colombia shown when the explorer is opened, as before). The theme sets the engine's role-named colour tokens (primary, secondary, tertiary, accent) in place of the palette names, which engine 1.6.0 deprecates; the colours are unchanged. The header, footer, homepage and repository page read their interface strings from the engine's language files instead of `ui.yaml`. Requires engine 1.6.0.
+- **The colophon's citation comes from the publisher record.** Engine 1.6.0 draws the «Cómo citar» section from the citation template Fisqua publishes, in place of the section written in the colophon page; each description page shows its own citation. Requires engine 1.6.0.
+- **The colophon's license and contact come from the publisher record.** Engine 1.6.0 draws «Licencia» from the federation's terms of use and «Contacto» from its email, after «Cómo citar», in place of the two sections written in the colophon page. The sentence on the AGPL-3.0 license of the site's code, and the link for reporting errors in the site, move to the end of «Versión y código». Requires engine 1.6.0 and an export whose publisher record carries the terms of use.
+- **Short notes in `hugo.toml`.** Each setting carries a short note in English and Spanish on what it does here; the full explanations are in the starter template's `hugo.toml`.
+- **The archive's marks.** The Neogranadina pomegranate is shown in the header in burgundy and on the home photograph in white, and the Neogranadina seal opens the colophon in black and the footer in white. The footer is set through `footer_logo`, `footer_seals` (the AMPL logo) and `footer_tagline` in `hugo.toml` instead of a footer template of the site's own, and the copyright line is built by the engine from the publisher's legal name. Requires engine 1.6.0.
+- **The Zasqua mark for the engine.** The Zasqua pomegranate, drawn in ink, marks the engine. It is the favicon, now the fruit alone instead of the whole lockup, and engine 1.6.0 shows it beside its credit in the footer and in a section on the engine at the end of the colophon, which replaces the colophon's own paragraph on the engine.
+
+### Added
+
+- **Retired addresses redirect to the current ones.** The exports now record the former codes of recoded entities, places and descriptions. The deploy workflow turns them into a redirect table in Cloudflare KV, and the Worker answers an old `/<code>/` address with a permanent (301) redirect to the new one, but only when the site has no page at the old address. Exports without former codes produce an empty table and change nothing.
+- **METS, EAC-CPF and Linked Places records.** The deploy can generate them and upload them, additively, to `manifests.zasqua.org`. The step runs only against production.
+- **The IIIF Worker.** The code of the Worker that serves `iiif.zasqua.org` from Backblaze B2 is now in this repository.
+
 ## [1.2.1] — 2026-07-07
 
 Maintenance release. Takes the Zasqua engine 1.4.1, sharpens static-asset caching, and moves the site's object storage to Backblaze B2. The site's content, URLs, and interface are unchanged.

@@ -66,12 +66,23 @@ válido).
 
 ## Despliegue
 
-`.github/workflows/deploy.yml` (ejecución manual) corre `zasqua build` y sube el
+`.github/workflows/deploy.yml` (ejecución manual) ejecuta `zasqua build` y sube el
 resultado a Cloudflare R2. La opción `target_bucket` es el interruptor entre
 preproducción y producción: por defecto apunta al bucket de preproducción, y
 desplegar a producción exige seleccionar explícitamente el bucket de producción.
 La subida compara con lo que ya está publicado, limita las eliminaciones al cinco
 por ciento como medida de seguridad y purga la caché de Cloudflare.
+
+Si se activa la opción `authority_exports` (desactivada por defecto), el flujo de
+trabajo genera además registros en tres formatos —METS para las descripciones,
+EAC-CPF para las entidades y Linked Places para los lugares— y los sube al bucket
+de manifiestos en Cloudflare R2, con cada formato en su propia carpeta y sin
+importar el valor de `target_bucket`. En ese bucket el flujo solo agrega o
+actualiza archivos: no borra nada de lo publicado, sino que lista los archivos
+que ya no corresponden a ningún registro. Como el bucket de manifiestos es de
+producción, la opción solo se acepta si `target_bucket` apunta al bucket de
+producción o si está activada la opción `dry_run`; con `dry_run`, el flujo genera
+los registros y los compara con lo publicado, pero no sube nada.
 
 ## Para montar su propio archivo
 
@@ -181,6 +192,16 @@ defaults to the staging bucket, and a production deploy requires explicitly
 selecting the production bucket. The upload diffs against what is already live,
 caps deletions at five percent as a safety check, and purges the Cloudflare
 cache.
+
+Setting the `authority_exports` input (off by default) makes the workflow also
+generate METS records for descriptions, EAC-CPF records for entities and Linked
+Places records for places, and upload each set to its own prefix of the
+manifests bucket on Cloudflare R2, whatever `target_bucket` says. The workflow
+only adds or updates files in that bucket: it never deletes what is already
+published, and lists the files that no longer match any record instead.
+Because that bucket is production, the input is accepted only with
+`target_bucket` set to the production bucket or with `dry_run` on; with
+`dry_run`, the workflow builds and compares but uploads nothing.
 
 ## Running your own archive
 

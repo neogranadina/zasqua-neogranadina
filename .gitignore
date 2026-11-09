@@ -21,12 +21,14 @@
 #   *.tgz — npm pack tarballs created when testing a tarball install of
 #     the engine. Not source files.
 #
-# Version: v1.0.0
+# Version: v1.3.0
 
 # Build output
 public/
 resources/_gen/
 .hugo_build.lock
+# METS, EAC-CPF and Linked Places generated for the manifests bucket
+exports-out/
 
 # Dependencies
 node_modules/
