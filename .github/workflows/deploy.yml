@@ -161,8 +161,23 @@ jobs:
       - name: Install npm dependencies
         # Pulls @ucsb-ampl/zasqua from the registry plus Hugo Extended,
         # Pagefind, and Tailwind (all instance deps). The engine's zasqua CLI
-        # lands in node_modules/.bin.
-        run: npm ci
+        # lands in node_modules/.bin. The hugo-extended package downloads the
+        # Hugo binary from GitHub releases, which can answer 504 for a while,
+        # so npm ci is retried. The binary is then kept outside node_modules
+        # and every later step points at it: `zasqua build` runs npm ci again,
+        # and that second install skips the download instead of depending on
+        # GitHub a second time.
+        run: |
+          for attempt in 1 2 3 4 5; do
+            npm ci && break
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            echo "::warning::npm ci failed (attempt $attempt of 5); retrying in 60 s"
+            sleep 60
+          done
+          mkdir -p "$RUNNER_TEMP/hugo-bin"
+          cp node_modules/hugo-extended/bin/hugo "$RUNNER_TEMP/hugo-bin/hugo"
+          echo "HUGO_SKIP_DOWNLOAD=1" >> "$GITHUB_ENV"
+          echo "HUGO_BIN_PATH=$RUNNER_TEMP/hugo-bin/hugo" >> "$GITHUB_ENV"
 
       - name: Deploy script unit tests (upload-to-b2 pytest suite)
         # moto[s3] mocks the S3 API in process — no real R2 credentials or
